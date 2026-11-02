@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#D15B50">
+  <title>Nopeustesti</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="corner-bolts" aria-hidden="true">
+    <img src="assets/flat-top-bolt.png" alt=""><img src="assets/flat-top-bolt.png" alt="">
+    <img src="assets/flat-top-bolt.png" alt=""><img src="assets/flat-top-bolt.png" alt="">
+  </div>
+  <main class="game-stage" aria-label="Nopeustesti reaction game">
+    <section class="score-screen" aria-label="Game display">
+      <img class="screen-art" src="assets/led-screen-new.png" alt="">
+      <div class="screen-ui" aria-live="polite"><span class="screen-message">WELCOME</span></div>
+    </section>
+    <section class="button-pad" aria-label="Game buttons">
+      <img src="assets/red-default.png" alt="Red button" draggable="false">
+      <img src="assets/yellow-default.png" alt="Yellow button" draggable="false">
+      <img src="assets/blue-default.png" alt="Blue button" draggable="false">
+      <img src="assets/green-default.png" alt="Green button" draggable="false">
+    </section>
+  </main>
+  <script src="layout.js"></script>
+  <script src="screen-ui.js"></script>
+  <script src="theme.js"></script>
+</body>
+</html>
