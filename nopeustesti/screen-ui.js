@@ -1,17 +1,14 @@
-/* Screen typography and glow. mainFontSize is a percentage of screen width. */
+/* Screen typography and glow. Font size tracks the rendered screen width. */
 const SCREEN_UI_LAYOUT = {
   mainFont: 'DS-DIGIT',
-  mainFontSize: 13,
+  mainFontSize: 15, // percent of screen container width
   letterSpacing: 0.08,
   glowStrength: 0.8
 };
-const screenMessage = document.querySelector('.screen-message');
-const screen = document.querySelector('.score-screen');
-screenMessage.style.fontFamily = SCREEN_UI_LAYOUT.mainFont;
-screenMessage.style.letterSpacing = `${SCREEN_UI_LAYOUT.letterSpacing}em`;
-screenMessage.style.setProperty('--led-glow-strength', SCREEN_UI_LAYOUT.glowStrength);
-const resizeScreenText = () => {
-  screenMessage.style.fontSize = `${screen.getBoundingClientRect().width * SCREEN_UI_LAYOUT.mainFontSize / 100}px`;
-};
-new ResizeObserver(resizeScreenText).observe(screen);
-resizeScreenText();
+(() => {
+  const display = document.querySelector('.score-screen');
+  display.style.setProperty('--led-main-font', `'${SCREEN_UI_LAYOUT.mainFont}', monospace`);
+  display.style.setProperty('--led-main-font-size', `${SCREEN_UI_LAYOUT.mainFontSize}cqw`);
+  display.style.setProperty('--led-letter-spacing', `${SCREEN_UI_LAYOUT.letterSpacing}em`);
+  display.style.setProperty('--led-glow-strength', SCREEN_UI_LAYOUT.glowStrength);
+})();
