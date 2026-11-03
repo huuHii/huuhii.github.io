@@ -16,17 +16,32 @@
   <main class="game-stage" aria-label="Nopeustesti reaction game">
     <section class="score-screen" aria-label="Game display">
       <img class="screen-art" src="assets/led-screen-new.png" alt="">
-      <div class="screen-ui" aria-live="polite"><span class="screen-message">WELCOME</span></div>
+      <div class="screen-ui" aria-live="polite">
+        <span class="practice-mode-label" hidden><span class="led-icon led-practice-start" aria-hidden="true"></span>PRACTICE MODE</span>
+        <span class="screen-message" data-animation="scroll-loop" aria-label="PRESS GREEN TO PLAY">PRESS GREEN TO PLAY</span>
+        <div class="screen-bottom-row">
+          <span class="screen-bottom-item screen-bottom-left"><span class="led-icon led-arrow led-arrow-left" aria-hidden="true"></span><span>MENU</span></span>
+          <span class="screen-bottom-item screen-bottom-center"><span class="led-icon led-star" aria-hidden="true"></span><span>0</span></span>
+          <span class="screen-bottom-item screen-bottom-right"><span>PLAY</span><span class="led-icon led-arrow" aria-hidden="true"></span></span>
+        </div>
+      </div>
     </section>
     <section class="button-pad" aria-label="Game buttons">
-      <img src="assets/red-default.png" alt="Red button" draggable="false">
-      <img src="assets/yellow-default.png" alt="Yellow button" draggable="false">
-      <img src="assets/blue-default.png" alt="Blue button" draggable="false">
-      <img src="assets/green-default.png" alt="Green button" draggable="false">
+      <button class="game-button" data-color="red" aria-label="Red" aria-pressed="false"><img src="assets/red-default.png" alt="" draggable="false"></button>
+      <button class="game-button" data-color="yellow" aria-label="Yellow" aria-pressed="false"><img src="assets/yellow-default.png" alt="" draggable="false"></button>
+      <button class="game-button" data-color="blue" aria-label="Blue" aria-pressed="false"><img src="assets/blue-default.png" alt="" draggable="false"></button>
+      <button class="game-button" data-color="green" aria-label="Green" aria-pressed="false"><img src="assets/green-default.png" alt="" draggable="false"></button>
     </section>
   </main>
   <script src="layout.js"></script>
   <script src="screen-ui.js"></script>
   <script src="theme.js"></script>
+  <script src="screen-animations.js"></script>
+  <script src="audio.js"></script>
+  <script src="buttons.js"></script>
+  <script src="game-rules.js"></script>
+  <script src="game-animations.js"></script>
+  <script src="menu.js"></script>
+  <script src="game.js"></script>
 </body>
 </html>

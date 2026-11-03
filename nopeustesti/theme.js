@@ -6,7 +6,7 @@ const GAME_THEME = {
   screenTintStrength: 0.28,
   ledColor: '#ff8383',
   ledGlowColor: '#e24f4a',
-  ledGlowBlur: 10,
+  ledGlowBlur: 20,
   screenBrightness: 1.08
 };
 const themeRoot = document.documentElement;

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 10.965 10.965">
+  <defs>
+    <style>
+      .cls-1{fill:none;stroke:#ffffff;stroke-width:1.2;stroke-linecap:round;stroke-linejoin:round}
+      .cls-2{fill:#ffffff;stroke:#ffffff;stroke-width:1.2;stroke-linecap:round;stroke-miterlimit:10}
+      .cls-3{fill:none;stroke:#ffffff;stroke-width:1.2;stroke-miterlimit:10}
+    </style>
+  </defs>
+  <title>Asset 1</title>
+  <g id="Asset_1" data-name="Asset 1">
+    <g>
+      <polyline points="5.687,3.079 7.862,5.482 5.687,7.78" class="cls-1"/>
+      <line x1="7.241" y1="5.482" x2="3.13" y2="5.482" class="cls-2"/>
+    </g>
+    <circle cx="5.482" cy="5.482" r="4.882" class="cls-3"/>
+  </g>
+</svg>
