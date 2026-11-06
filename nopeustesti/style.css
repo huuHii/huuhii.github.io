@@ -38,7 +38,7 @@ body { overflow:hidden; background:linear-gradient(180deg,var(--game-top),var(--
 .practice-metric + .practice-metric { margin-left:.4em; }
 .button-pad { position:absolute; display:grid; justify-content:center; justify-items:center; align-items:center; }
 .button-pad img { display:block; width:100%; min-width:0; aspect-ratio:1; object-fit:contain; user-select:none; -webkit-user-drag:none; }
-.game-button { display:block; width:100%; min-width:0; padding:0; margin:0; border:0; background:none; border-radius:50%; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; cursor:pointer; }
+.game-button { display:block; width:100%; min-width:0; padding:0; margin:0; border:0; background:none; border-radius:50%; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent; cursor:pointer; }
 .game-button:focus-visible { outline:2px solid var(--led-color); outline-offset:3px; }
 
 /* Game metrics sit inside the display, away from its corner controls. */
