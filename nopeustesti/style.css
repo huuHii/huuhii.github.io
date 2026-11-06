@@ -51,3 +51,5 @@ body { overflow:hidden; background:linear-gradient(180deg,var(--game-top),var(--
 .screen-bottom-row[data-view="game-result"] { grid-template-columns:1fr 1.35fr 1.35fr 1fr; }
 .practice-mode-label { position:absolute; top:0; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:.3em; font-family:var(--led-bottom-font); font-size:var(--led-bottom-font-size); letter-spacing:var(--led-letter-spacing); }
 .practice-mode-label[hidden] { display:none; }
+.app-version { font-size:.78em; opacity:.9; }
+.screen-bottom-row > .welcome-version { grid-column:3; justify-content:flex-end; }

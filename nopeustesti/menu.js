@@ -91,10 +91,19 @@ const PRACTICE_SETTINGS = {
     practiceDetail = false;
     const item = MENU_ITEMS[current];
     renderFooter(item);
+    if (boot) {
+      const version = document.createElement('span');
+      version.textContent = 'v2 6.11.2026';
+      version.className = 'app-version';
+      const welcomeVersion = document.createElement('span');
+      welcomeVersion.className = 'screen-bottom-item screen-bottom-right welcome-version';
+      welcomeVersion.append(version);
+      footer.replaceChildren(welcomeVersion);
+    }
     if (item.sequence === 'title-loop') {
       const timing = SCREEN_SEQUENCE_SETTINGS['title-loop'];
       const holdSeconds = boot ? timing.welcomeHoldSeconds : item.id === 'practice' ? timing.practiceHoldSeconds : timing.holdSeconds;
-      ScreenText.titleLoop(boot ? 'WELCOME' : item.title, item.text, { holdSeconds });
+      ScreenText.titleLoop(boot ? 'WELCOME' : item.title, item.text, { holdSeconds, onLoopStart: boot ? () => { renderFooter(item); } : undefined });
     } else {
       const heading = item.id === 'highscores' ? `HIGHSCORES: ${GameRecords.highscore}` : item.channel ? `${item.text}: ${volumeLabel(item.channel)}` : item.text;
       ScreenText.show(heading, item.animation || 'scroll-stop');

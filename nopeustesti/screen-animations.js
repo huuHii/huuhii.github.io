@@ -88,9 +88,9 @@ const SCREEN_SEQUENCE_SETTINGS = {
     message.replaceChildren(track);
     measure();
   }
-  function titleLoop(title, loopText, { holdSeconds = SCREEN_SEQUENCE_SETTINGS['title-loop'].holdSeconds } = {}) {
+  function titleLoop(title, loopText, { holdSeconds = SCREEN_SEQUENCE_SETTINGS['title-loop'].holdSeconds, onLoopStart = null } = {}) {
     show(title, 'scroll-stop');
-    sequence = { loopText, holdSeconds, elapsed: 0 };
+    sequence = { loopText, holdSeconds, elapsed: 0, onLoopStart };
   }
   function tick(now) {
     const frameMs = 1000 / Math.max(1, settings.frameRate);
@@ -105,7 +105,9 @@ const SCREEN_SEQUENCE_SETTINGS = {
         sequence.elapsed += frames * frameMs / 1000;
         if (sequence.elapsed >= sequence.holdSeconds) {
           const nextText = sequence.loopText;
+          const callback = sequence.onLoopStart;
           show(nextText, 'scroll-loop');
+          callback?.();
         }
       }
     }
