@@ -57,6 +57,7 @@ const PRACTICE_SETTINGS = {
     }, MENU_SETTINGS.limitFeedbackSeconds * 1000);
   }
   function renderFooter(item) {
+    Platformer.setVisible(item.id === 'standard');
     const left = document.createElement('span');
     const middle = document.createElement('span');
     const right = document.createElement('span');

@@ -1,7 +1,7 @@
 /* Width drives desired size; available height caps it to keep the layout on screen. */
 const GAME_LAYOUT = {
-  landscape: { maxLayoutAspectRatio: 2.2, screenWidth: 40, buttonToScreen: .5, boltToScreen: 0.08, screenBottomAnchor: 45, minScreenButtonGap: 15, sidePadding: 3, bottomPadding: 5, buttonGap: 1 },
-  portrait:  { maxLayoutAspectRatio: 0.8, screenWidth: 85, buttonToScreen: 0.55, boltToScreen: 0.08, screenBottomAnchor: 40, minScreenButtonGap: 5, sidePadding: 5, bottomPadding: 8, buttonGap: 2 },
+  landscape: { maxLayoutAspectRatio: 2.2, screenWidth: 50, screenAspectRatio: 538 / 212, buttonToScreen: .37, boltToScreen: 0.08, screenBottomAnchor: 50, minScreenButtonGap: 5, sidePadding: 3, bottomPadding: 5, buttonGap: 1 },
+  portrait:  { maxLayoutAspectRatio: 0.8, screenWidth: 85, screenAspectRatio: 538 / 212, buttonToScreen: 0.55, boltToScreen: 0.08, screenBottomAnchor: 40, minScreenButtonGap: 5, sidePadding: 5, bottomPadding: 8, buttonGap: 2 },
   bolts: { inset: 5 }
 };
 const root = document.documentElement;
@@ -30,10 +30,8 @@ function applyLayout() {
   root.dataset.orientation = mode;
   const cols = mode === 'landscape' ? 4 : 2;
   const rows = mode === 'landscape' ? 1 : 2;
-  pad.style.gridTemplateColumns = `repeat(${cols}, var(--button-size))`;
   const side = width * cfg.sidePadding / 100;
   const gap = width * cfg.buttonGap / 100;
-  const artRatio = 212 / 538;
   const desiredScreenW = width * cfg.screenWidth / 100;
   const desiredButton = desiredScreenW * cfg.buttonToScreen;
   const screenMax = width - 2 * side;
@@ -47,18 +45,29 @@ function applyLayout() {
   const buttonRoom = Math.max(0, height - screenBottom - buttonBottom - buttonGap);
   const desiredButtonsHeight = rows * desiredButton + (rows - 1) * gap;
   const verticalScale = buttonRoom / desiredButtonsHeight;
-  const scale = Math.min(1, widthScale, aspectRatioScale, verticalScale);
+  const screenHeightScale = screenBottom * cfg.screenAspectRatio / desiredScreenW;
+  const scale = Math.min(1, widthScale, aspectRatioScale, verticalScale, screenHeightScale);
   const screenW = desiredScreenW * scale;
+  const screenH = screenW / cfg.screenAspectRatio;
   const buttonSize = desiredButton * scale;
+  // Ignore transient invalid measurements instead of saving a collapsed layout.
+  if (!Number.isFinite(buttonSize) || buttonSize <= 0 || !Number.isFinite(screenW) || screenW <= 0) return;
   root.style.setProperty('--bolt-size', `${screenW * cfg.boltToScreen}px`);
   const scaledGap = gap * scale;
   screen.style.width = `${screenW}px`;
+  screen.style.height = `${screenH}px`;
+  // A wider screen reveals more of the scene while the HUD still fits vertically.
+  screen.style.setProperty('--led-unit', `${Math.min(screenW, screenH * (538 / 212)) / 100}px`);
   screen.style.left = '50%';
-  screen.style.top = `${screenBottom - screenW * artRatio}px`;
+  screen.style.top = `${screenBottom - screenH}px`;
   screen.style.transform = 'translateX(-50%)';
   pad.style.setProperty('--button-size', `${buttonSize}px`);
+  // Explicit row sizes keep the portrait grid visible when iOS restores it.
+  pad.style.gridTemplateColumns = `repeat(${cols}, var(--button-size))`;
+  pad.style.gridTemplateRows = `repeat(${rows}, var(--button-size))`;
   pad.style.gap = `${scaledGap}px`;
   pad.style.width = `${cols * buttonSize + (cols - 1) * scaledGap}px`;
+  pad.style.height = `${rows * buttonSize + (rows - 1) * scaledGap}px`;
   pad.style.left = '50%';
   pad.style.bottom = `${buttonBottom}px`;
   pad.style.transform = 'translateX(-50%)';
@@ -70,13 +79,15 @@ update();
 function settleLayout() {
   settleTimers.forEach(clearTimeout);
   update();
-  settleTimers = [100, 300, 700].map(delay => setTimeout(update, delay));
+  settleTimers = [100, 300, 700, 1500].map(delay => setTimeout(update, delay));
 }
 addEventListener('resize', settleLayout);
 addEventListener('orientationchange', settleLayout);
 window.screen.orientation?.addEventListener('change', settleLayout);
 window.visualViewport?.addEventListener('resize', settleLayout);
 window.visualViewport?.addEventListener('scroll', update);
+// Safe-area changes can resize the stage without a window resize event.
+if (window.ResizeObserver) new ResizeObserver(update).observe(stage);
 addEventListener('pageshow', settleLayout);
 addEventListener('focus', settleLayout);
 document.addEventListener('visibilitychange', () => {

@@ -5,6 +5,7 @@
   const banner = document.querySelector('.practice-mode-label');
   let phase = 'idle', practice = false, score = 0, bpm = 0;
   let startingScore = 0, beats = 0, queue = [], lastColor = null;
+  const plannedColors = [];
   let beatTimer = null, returnTimer = null, session = 0, nextBeat = 0;
   function element(className, value) {
     const node = document.createElement('span');
@@ -57,11 +58,13 @@
     banner.hidden = true;
     phase = 'idle';
     queue = [];
+    Platformer.endRun();
   }
   function finish() {
     if (phase !== 'playing') return;
     phase = 'ending';
     clearTimeout(beatTimer);
+    Platformer.endRun();
     GameAudio.stopTone();
     if (!practice) GameRecords.save(score);
     ScreenText.show(String(score), 'static', { variant: 'score' });
@@ -84,21 +87,36 @@
       }
     }, lit => { if (session === token) ScreenText.setVisible(lit); });
   }
+  function planColors(count) {
+    while (plannedColors.length < count) {
+      const candidates = colors.filter(color => color !== lastColor);
+      lastColor = candidates[Math.floor(Math.random() * candidates.length)];
+      plannedColors.push(lastColor);
+      if (!practice) Platformer.planBeat(beats + plannedColors.length, lastColor);
+    }
+  }
+  function planObstacleCues() {
+    planColors(OBSTACLE_SETTINGS.previewBeats);
+  }
   function beat() {
     if (phase !== 'playing') return;
     // maxLateBeeps excludes the current beep: 0 requires clearing each before the next.
     if (queue.length > GAME_RULES.maxLateBeeps) { finish(); return; }
     bpm = GameRules.bpmAt(startingScore + beats);
-    const candidates = colors.filter(color => color !== lastColor);
-    const color = candidates[Math.floor(Math.random() * candidates.length)];
-    lastColor = color;
+    planColors(1);
+    const color = plannedColors.shift();
     GameLights.all(false);
     GameButtons.setLit(color, true);
     queue.push(color);
     GameAudio.tone(color);
     beats++;
     renderFooter();
+    const scheduledBeat = nextBeat;
     nextBeat += 60000 / GameRules.bpmAt(startingScore + beats);
+    if (!practice) {
+      Platformer.beat(scheduledBeat, nextBeat);
+      planObstacleCues();
+    }
     beatTimer = setTimeout(() => {
       // Avoid a burst of missed beats after a stalled/hidden browser.
       if (performance.now() - nextBeat > 60000 / bpm) finish();
@@ -114,6 +132,7 @@
     score = startingScore;
     beats = 0;
     lastColor = null;
+    plannedColors.length = 0;
     bpm = GameRules.bpmAt(startingScore);
     phase = 'ready';
     banner.hidden = !practice;
@@ -125,7 +144,12 @@
       if (session !== token || phase !== 'ready' || !textDone || !lightsDone) return;
       phase = 'playing';
       ScreenText.show(String(score), 'static', { variant: 'score' });
-      nextBeat = performance.now() + 60000 / bpm;
+      const startedAt = performance.now();
+      nextBeat = startedAt + 60000 / bpm;
+      if (!practice) {
+        Platformer.startRun(startedAt, nextBeat);
+        planObstacleCues();
+      }
       beatTimer = setTimeout(beat, 60000 / bpm);
     }
     ScreenText.show('READY', 'scroll-stop', { onComplete() { textDone = true; begin(); } });
@@ -137,6 +161,7 @@
     if (phase !== 'playing' || !queue.length) return;
     if (event.detail.color !== queue[0]) { finish(); return; }
     queue.shift();
+    if (!practice) Platformer.act(event.detail.color, beats - queue.length);
     score++;
     ScreenText.show(String(score), 'static', { variant: 'score' });
     renderFooter();

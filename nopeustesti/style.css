@@ -1,6 +1,10 @@
 :root { color-scheme:dark; --game-top:#D15B50; --game-bottom:#B3293E; --bolt-inset:5vmin; --bolt-size:5vh; --screen-tint:#c84a43; --screen-tint-strength:.28; --screen-brightness:1.08; --led-color:#ff2929; --led-glow-color:#ff2020; --led-glow-blur:10px; }
 @font-face { font-family:'DS-DIGIT'; src:url('assets/DS-DIGIT.TTF') format('truetype'); font-style:normal; font-weight:normal; font-display:swap; }
 * { box-sizing:border-box; }
+/* This is a touch game; suppress browser selection/tap flashes on the whole UI. */
+html, body, body * { -webkit-tap-highlight-color:transparent; -webkit-touch-callout:none; }
+body, body * { -webkit-user-select:none; user-select:none; }
+img, svg { -webkit-user-drag:none; user-select:none; }
 html,body { width:100%; height:100%; margin:0; overscroll-behavior:none; }
 html { background:var(--game-bottom); }
 body { overflow:hidden; background:linear-gradient(180deg,var(--game-top),var(--game-bottom)); font-family:system-ui,sans-serif; }
@@ -12,6 +16,7 @@ body { overflow:hidden; background:linear-gradient(180deg,var(--game-top),var(--
 .corner-bolts img:nth-child(1){top:var(--bolt-inset);left:var(--bolt-inset)}.corner-bolts img:nth-child(2){top:var(--bolt-inset);right:var(--bolt-inset)}.corner-bolts img:nth-child(3){bottom:var(--bolt-inset);left:var(--bolt-inset)}.corner-bolts img:nth-child(4){right:var(--bolt-inset);bottom:var(--bolt-inset)}
 .score-screen { position:absolute; aspect-ratio:538 / 212; overflow:visible; isolation:isolate; container-type:inline-size; filter:brightness(var(--screen-brightness)); -webkit-mask-image:url('assets/led-screen-new.png'); mask-image:url('assets/led-screen-new.png'); -webkit-mask-size:100% 100%; mask-size:100% 100%; -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; }
 .screen-art { position:absolute; inset:0; display:block; width:100%; height:100%; object-fit:fill; }
+.platformer-scene { position:absolute; inset:1.4% 1.2%; width:97.6%; height:97.2%; border-radius:2.5cqw; pointer-events:none; }
 .score-screen::after { content:""; position:absolute; z-index:1; inset:0; background:var(--screen-tint); opacity:var(--screen-tint-strength); mix-blend-mode:color; pointer-events:none; }
 .screen-ui { position:absolute; z-index:2; inset:var(--led-padding-top, 4cqw) var(--led-padding-x, 8cqw) var(--led-padding-bottom, 5cqw); display:grid; grid-template-rows:minmax(0, 1fr) auto; overflow:visible; white-space:nowrap; color:var(--led-color); text-shadow:0 0 var(--led-glow-blur) var(--led-glow-color),0 0 calc(var(--led-glow-blur) * 2) var(--led-glow-color); line-height:1; }
 .screen-message { display:flex; min-width:0; align-items:center; justify-content:center; transform:translateY(var(--led-main-text-offset, 0cqw)); font-family:var(--led-main-font, 'DS-DIGIT', monospace); font-size:var(--led-main-font-size, 15cqw); letter-spacing:var(--led-letter-spacing, .08em); }
@@ -41,7 +46,7 @@ body { overflow:hidden; background:linear-gradient(180deg,var(--game-top),var(--
 .practice-metric + .practice-metric { margin-left:.4em; }
 .button-pad { position:absolute; display:grid; justify-content:center; justify-items:center; align-items:center; }
 .button-pad img { display:block; width:100%; min-width:0; aspect-ratio:1; object-fit:contain; user-select:none; -webkit-user-drag:none; }
-.game-button { display:block; width:100%; min-width:0; padding:0; margin:0; border:0; background:none; border-radius:50%; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent; cursor:pointer; }
+.game-button { display:block; width:100%; height:100%; min-width:0; min-height:0; padding:0; margin:0; border:0; background:none; border-radius:50%; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent; cursor:pointer; }
 .game-button:focus-visible { outline:2px solid var(--led-color); outline-offset:3px; }
 
 /* Game metrics sit inside the display, away from its corner controls. */
@@ -49,6 +54,8 @@ body { overflow:hidden; background:linear-gradient(180deg,var(--game-top),var(--
 .screen-bottom-row[data-view="game"] { grid-template-columns:1fr 1fr; padding-inline:15%; }
 .screen-bottom-row[data-view="practice-game"] { grid-template-columns:1fr; }
 .screen-bottom-row[data-view="game-result"] { grid-template-columns:1fr 1.35fr 1.35fr 1fr; }
+.screen-ui:has(.screen-bottom-row:is([data-view="standard"], [data-view="game"], [data-view="game-result"])) { grid-template-rows:minmax(0, 1fr) var(--led-bottom-font-size); }
+.screen-bottom-row:is([data-view="standard"], [data-view="game"], [data-view="game-result"]) { position:absolute; top:0; inset-inline:0; }
 .practice-mode-label { position:absolute; top:0; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:.3em; font-family:var(--led-bottom-font); font-size:var(--led-bottom-font-size); letter-spacing:var(--led-letter-spacing); }
 .practice-mode-label[hidden] { display:none; }
 .app-version { font-size:.78em; opacity:.9; }

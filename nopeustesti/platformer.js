@@ -1,0 +1,408 @@
+/* World coordinates are measured in display heights. Every ground sprite shares one scroll distance. */
+const Platformer = (() => {
+  const canvas = document.querySelector('.platformer-scene');
+  const context = canvas.getContext('2d');
+  const layout = PLATFORMER_LAYOUT;
+  const settings = PLATFORMER_SETTINGS;
+  const playerSettings = PLAYER_ANIMATION_SETTINGS;
+  const obstacleSettings = OBSTACLE_SETTINGS;
+  const idleBeatMs = 60000 / GameRules.bpmAt(0);
+  const centerDepth = layout.lanes.center;
+  const player = PlatformerSprites.load('snail.png');
+  const obstacleTypes = Object.fromEntries(Object.entries(obstacleSettings.types).map(([name, type]) =>
+    [name, { ...type, sprite: PlatformerSprites.load(type.file) }]
+  ));
+  const makeTrack = config => ({ config, sprites: config.files.map(file => PlatformerSprites.load(file)),
+    items: [], next: null });
+  const bumps = makeTrack(settings.bumps);
+  const clouds = makeTrack(BACKGROUND_ANIMATIONS.clouds);
+  const particles = { items: [], next: null };
+  const obstacles = [];
+  const actions = [];
+  let width = 0, height = 0, frame = 0;
+  let run = null;
+  let action = null;
+  let updatedAt = performance.now();
+  let groundDistance = 0;
+  let beatOrigin = 0;
+  let cameraNudge = 0;
+
+  function resize() {
+    const bounds = canvas.getBoundingClientRect();
+    if (height !== bounds.height) {
+      // Bump and particle widths in world units depend on the display height.
+      bumps.items.length = 0;
+      bumps.next = null;
+      particles.items.length = 0;
+      particles.next = null;
+    }
+    ({ width, height } = bounds);
+    if (!width || !height) return;
+    const ratio = window.devicePixelRatio || 1;
+    const pixelWidth = Math.max(1, Math.round(width * ratio));
+    const pixelHeight = Math.max(1, Math.round(height * ratio));
+    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+    context.setTransform(pixelWidth / width, 0, 0, pixelHeight / height, 0, 0);
+    context.imageSmoothingEnabled = false;
+  }
+  new ResizeObserver(resize).observe(canvas);
+  window.addEventListener('resize', resize);
+
+  function cuePosition(now) {
+    return run.beats + Math.min(1, Math.max(0, (now - run.startedAt) / run.beatMs));
+  }
+  function actionBeat(cueBeat) {
+    return cueBeat + 1;
+  }
+  function earlyPressStrength(cueBeat, position) {
+    const { fullAtBeatsEarly, neutralAtBeatsEarly } = settings.earlyPressNudge;
+    const lead = actionBeat(cueBeat) - position;
+    return Math.min(1, Math.max(0, (lead - neutralAtBeatsEarly) /
+      Math.max(0.001, fullAtBeatsEarly - neutralAtBeatsEarly)));
+  }
+  function runnerDistance() {
+    return run ? beatOrigin + run.position * layout.beatSpacing : groundDistance;
+  }
+  function advanceWorld(now) {
+    if (now <= updatedAt) return;
+    const elapsed = (now - updatedAt) / 1000;
+    const nudge = settings.earlyPressNudge;
+    let targetNudge = 0;
+    if (run) {
+      const { smoothingSeconds, maxCatchUpSpeed } = settings.playhead;
+      const blend = smoothingSeconds > 0 ? -Math.expm1(-elapsed / smoothingSeconds) : 1;
+      // Track the cue clock at normal pace and ease only the extra travel after a wait.
+      const cue = cuePosition(now);
+      const target = Math.min(cue, actionBeat(run.confirmedCue + 1));
+      const cueTravel = cue - run.cue;
+      const remaining = Math.max(0, target - run.position);
+      const maxTravel = elapsed * 1000 / run.beatMs * maxCatchUpSpeed;
+      run.position += Math.min(remaining, maxTravel, cueTravel + Math.max(0, remaining - cueTravel) * blend);
+      run.cue = cue;
+      groundDistance = beatOrigin + cue * layout.beatSpacing;
+      // Keep the last press's shift across cues, then taper it as the next response gets later.
+      const strength = run.confirmedCue === run.beats ? run.earlyPress :
+        Math.min(run.earlyPress, earlyPressStrength(run.beats, cue));
+      targetNudge = nudge.maxRight * strength;
+    } else {
+      groundDistance += elapsed * 1000 / idleBeatMs * layout.beatSpacing;
+    }
+    const nudgeBlend = nudge.smoothingSeconds > 0 ? -Math.expm1(-elapsed / nudge.smoothingSeconds) : 1;
+    cameraNudge += (targetNudge - cameraNudge) * nudgeBlend;
+    updatedAt = now;
+  }
+  function scaleAt(fromBottom) {
+    return 1 + layout.perspectiveSpread * (1 - fromBottom / layout['ground-line']);
+  }
+  function projectX(worldX, fromBottom) {
+    return width / 2 + worldX * height * scaleAt(fromBottom);
+  }
+  function projectY(fromBottom) {
+    return height * (1 - fromBottom);
+  }
+  function runnerX(x) {
+    return (x - 0.5) * width / height;
+  }
+  function beatLineX(beat) {
+    const restX = (layout.player.x - 0.5) * width / height / scaleAt(centerDepth);
+    return beatOrigin + restX + beat * layout.beatSpacing;
+  }
+  function obstacleX(obstacle) {
+    // The action starts at the leading line; the obstacle sits at the cell's center.
+    return beatLineX(obstacle.beat + 0.5);
+  }
+  function spriteWidth(sprite, size) {
+    return size * sprite.image.naturalWidth / sprite.image.naturalHeight;
+  }
+  function randomBetween([min, max]) {
+    return min + (max - min) * Math.random();
+  }
+  function updateTrack(track, distance, gap, makeItem, measure) {
+    const { config, items, sprites } = track;
+    if (!sprites.length || sprites.some(sprite => !sprite.image.naturalWidth)) return;
+    const left = distance - width / (2 * height);
+    const right = distance + width / (2 * height);
+    while (items.length && items[0].x + measure(items[0]) / height < left) items.shift();
+    if (track.next === null || track.next < left - width / height) {
+      track.next = left + randomBetween(gap);
+    }
+    while (track.next < right + 0.5) {
+      const sprite = sprites[Math.floor(Math.random() * sprites.length)];
+      const item = { ...makeItem(), sprite, x: track.next, mirror: Math.random() < config.mirrorChance };
+      items.push(item);
+      track.next += measure(item) / height + randomBetween(gap);
+    }
+  }
+  function drawScenery(item, x, y, w, h) {
+    if (item.mirror) {
+      context.save();
+      context.translate(x + w, y);
+      context.scale(-1, 1);
+      PlatformerSprites.draw(context, item.sprite, 0, 0, w, h);
+      context.restore();
+    } else {
+      PlatformerSprites.draw(context, item.sprite, x, y, w, h);
+    }
+  }
+  function drawClouds(distance) {
+    const config = clouds.config;
+    const travel = distance * config.speed;
+    const cloudWidth = item => spriteWidth(item.sprite, item.size * height);
+    updateTrack(clouds, travel, config.spawnGap, () => ({ size: randomBetween(config.size),
+      fromBottom: randomBetween(config.fromBottom) }), cloudWidth);
+    context.globalAlpha = config.opacity;
+    for (const cloud of clouds.items) {
+      const size = cloud.size * height;
+      drawScenery(cloud, projectX(cloud.x - travel, layout['ground-line']),
+        projectY(cloud.fromBottom) - size, cloudWidth(cloud), size);
+    }
+    context.globalAlpha = 1;
+  }
+  function drawGroundParticles(distance) {
+    const { spawnGap, spawnChance, length, thickness, fromBottom, opacity } = GROUND_PARTICLES;
+    if (opacity <= 0 || spawnChance <= 0) return;
+
+    const horizon = layout['ground-line'];
+    const px = width / canvas.width;
+    const py = height / canvas.height;
+    const top = Math.ceil(projectY(horizon) / py);
+    const rows = Math.min(canvas.height - top, Math.max(1, Math.round(thickness / py)));
+    if (rows <= 0) return;
+
+    // Use the widest view of the ground for spawning and retain a margin for camera nudges.
+    const worldPixel = 1 / (height * Math.min(scaleAt(0), scaleAt(horizon)));
+    const halfSpan = width / 2 * worldPixel;
+    const margin = width / height * settings.earlyPressNudge.maxRight / scaleAt(centerDepth);
+    const left = distance - halfSpan - margin - (length[1] + px) * worldPixel;
+    const right = distance + halfSpan + margin;
+    const { items } = particles;
+    while (items.length && items[0].x < left) items.shift();
+    if (particles.next === null || particles.next < left) particles.next = left;
+    while (particles.next <= right) {
+      const fraction = randomBetween(fromBottom);
+      const size = randomBetween(length);
+      if (Math.random() < spawnChance) items.push({ x: particles.next, fraction, size });
+      particles.next += Math.max(px, size) / (height * scaleAt(fraction * horizon)) + randomBetween(spawnGap);
+    }
+
+    const path = new Path2D();
+    const bottom = canvas.height - rows;
+    for (const { x, fraction, size } of items) {
+      const column = Math.round(projectX(x - distance, fraction * horizon) / px);
+      const row = Math.round(bottom - fraction * (bottom - top));
+      path.rect(column * px, row * py, Math.max(1, Math.round(size / px)) * px, rows * py);
+    }
+    context.fillStyle = GAME_THEME.ledColor;
+    context.globalAlpha = opacity;
+    PlatformerSprites.drawLit(context, () => context.fill(path));
+    context.globalAlpha = 1;
+  }
+  function drawGround(distance) {
+    const horizon = layout['ground-line'];
+    const horizonY = projectY(horizon);
+    if (settings.showBeatLines) {
+      const halfSpan = width / (2 * height);
+      const firstBeat = Math.ceil((distance - halfSpan - beatLineX(0)) / layout.beatSpacing);
+      context.lineWidth = settings.beatLineWidth;
+      context.strokeStyle = GAME_THEME.ledColor;
+      context.globalAlpha = settings.beatLineOpacity;
+      const lines = new Path2D();
+      for (let beat = firstBeat; ; beat++) {
+        const worldX = beatLineX(beat) - distance;
+        if (worldX > halfSpan) break;
+        lines.moveTo(projectX(worldX, horizon), horizonY);
+        lines.lineTo(projectX(worldX, 0), height);
+      }
+      PlatformerSprites.drawLit(context, () => context.stroke(lines));
+    }
+
+    // Align the line and the bottom row of each bump to the same backing pixels.
+    const px = width / canvas.width;
+    const py = height / canvas.height;
+    const pixel = Math.max(1, Math.round(settings.groundLineWidth / py)) * py;
+    const y = Math.round((horizonY - pixel / 2) / py) * py;
+    const bumpWidth = item => Math.round(item.sprite.image.naturalWidth * pixel / px) * px;
+    updateTrack(bumps, distance, settings.bumps.gap, () => ({}), bumpWidth);
+    context.fillStyle = GAME_THEME.ledColor;
+    context.globalAlpha = settings.groundLineOpacity;
+    const groundLine = new Path2D();
+    let cursor = 0;
+    for (const bump of bumps.items) {
+      const x = Math.round(projectX(bump.x - distance, horizon) / px) * px;
+      const w = bumpWidth(bump);
+      if (x >= width) break;
+      if (x + w <= 0) continue;
+      if (x > cursor) groundLine.rect(cursor, y, x - cursor, pixel);
+      const h = bump.sprite.image.naturalHeight * pixel;
+      drawScenery(bump, x, y + pixel - h, w, h);
+      cursor = Math.max(cursor, x + w);
+    }
+    if (cursor < width) groundLine.rect(cursor, y, width - cursor, pixel);
+    PlatformerSprites.drawLit(context, () => context.fill(groundLine));
+    context.globalAlpha = 1;
+  }
+  function obstacleSize({ type, depth }) {
+    return type.hangFromBottom === undefined ? type.size * scaleAt(depth) / scaleAt(centerDepth) : type.size;
+  }
+  function drawObstacle(obstacle, viewDistance) {
+    const { type, depth } = obstacle;
+    if (!type.sprite.image.naturalWidth) return;
+    const hanging = type.hangFromBottom !== undefined;
+    const size = obstacleSize(obstacle) * height;
+    const w = spriteWidth(type.sprite, size);
+    const x = projectX(obstacleX(obstacle) - viewDistance, depth);
+    if (x < -size || x > width + size) return;
+    if (hanging) {
+      const swingTravel = type.swingSeconds * 1000 / idleBeatMs * layout.beatSpacing;
+      const swing = swingTravel > 0 ?
+        Math.sin(groundDistance / swingTravel * 2 * Math.PI) * type.swingDegrees * Math.PI / 180 : 0;
+      context.save();
+      context.translate(x, projectY(type.hangFromBottom) - size);
+      context.rotate(swing);
+      PlatformerSprites.draw(context, type.sprite, -w / 2, 0, w, size);
+      context.restore();
+    } else {
+      PlatformerSprites.draw(context, type.sprite, x - w / 2, projectY(depth) - size, w, size);
+    }
+  }
+  function drawPlayer(pose, viewDistance) {
+    if (!player.image.naturalWidth) return;
+    const size = layout.player.size * height * scaleAt(pose.fromBottom) / scaleAt(centerDepth);
+    const w = spriteWidth(player, size);
+    const distance = runnerDistance();
+    const scrollOffset = (distance - viewDistance) * height * scaleAt(centerDepth);
+    const strideOffset = PlayerAnimations.runOffset(distance - beatOrigin) * height * pose.stride;
+    const x = pose.x * width + scrollOffset + strideOffset;
+    const y = projectY(pose.fromBottom + layout.player.fromBottom + pose.lift);
+    if (!pose.roll) {
+      const h = size * pose.heightScale;
+      PlatformerSprites.draw(context, player, x - w / 2, y - h, w, h);
+      return;
+    }
+    // Squash after rotating, and keep the rotated sprite's lower edge at lane height.
+    const radiusY = (Math.abs(Math.sin(pose.roll)) * w + Math.abs(Math.cos(pose.roll)) * size) / 2;
+    context.save();
+    context.translate(x, y - radiusY * pose.heightScale);
+    context.scale(1, pose.heightScale);
+    context.rotate(pose.roll);
+    PlatformerSprites.draw(context, player, -w / 2, -size / 2, w, size);
+    context.restore();
+  }
+  function obstacleRange(action, distance) {
+    if (!action.obstacle) return { approach: 0, clear: true };
+    const { type, depth } = action.obstacle;
+    const size = obstacleSize(action.obstacle);
+    const obstacleRadius = type.sprite.image.naturalWidth ? spriteWidth(type.sprite, size) / 2 : size / 2;
+    // Include the spikeball's full sweep so it cannot swing back into a returning player.
+    const swing = type.swingSeconds > 0 ? size * Math.sin(Math.abs(type.swingDegrees) * Math.PI / 180) : 0;
+    const playerSize = layout.player.size * scaleAt(layout.lanes.right) / scaleAt(centerDepth);
+    const playerWidth = player.image.naturalWidth ? spriteWidth(player, playerSize) : playerSize;
+    const rotating = action.config.turnsPerBeat || action.from.roll !== 0;
+    const playerRadius = (rotating ? Math.hypot(playerWidth, playerSize) : playerWidth) / 2;
+    const padding = playerRadius + playerSettings.stride.sway + playerSettings.clearance;
+    const center = (obstacleX(action.obstacle) - distance) * scaleAt(depth);
+    const left = runnerX(Math.min(action.from.x, action.target.x, layout.player.x)) - padding;
+    const right = runnerX(Math.max(action.from.x, action.target.x, layout.player.x)) + padding;
+    return {
+      approach: center - obstacleRadius - swing - right,
+      clear: center + obstacleRadius + swing <= left
+    };
+  }
+  function poseAt(position, distance) {
+    const { rest, playerPose } = PlayerAnimations;
+    if (!action) return rest;
+    const { approach, clear } = obstacleRange(action, distance);
+    action.cleared ||= clear;
+    const pose = playerPose(action, position, distance, approach, action.cleared);
+    if (pose === rest) action = null;
+    return pose;
+  }
+  function updatePlayer() {
+    const { rest, start } = PlayerAnimations;
+    if (!run) return rest;
+    while (actions.length && actions[0].beat <= run.position) {
+      const { color, beat, obstacle } = actions.shift();
+      // Sample the pose at the crossing, even when a frame lands past the line.
+      const distance = beatOrigin + beat * layout.beatSpacing;
+      action = start(color, poseAt(beat, distance), beat, distance);
+      action.obstacle = obstacle;
+      action.approach = obstacleRange(action, distance).approach;
+    }
+    return poseAt(run.position, runnerDistance());
+  }
+  function render(now) {
+    if (width && height) {
+      advanceWorld(now);
+      const pose = updatePlayer();
+      context.clearRect(0, 0, width, height);
+      const distance = groundDistance - cameraNudge * width / (height * scaleAt(centerDepth));
+      drawClouds(groundDistance);
+      drawGroundParticles(distance);
+      drawGround(distance);
+      const left = distance - width / (2 * height);
+      // An obstacle can leave the camera before the runner reaches it.
+      const discardBefore = Math.min(left, runnerDistance() - layout.beatSpacing);
+      while (obstacles.length && obstacleX(obstacles[0]) + obstacleSize(obstacles[0]) < discardBefore) obstacles.shift();
+      for (const obstacle of obstacles) {
+        if (obstacle.depth >= pose.fromBottom) drawObstacle(obstacle, distance);
+      }
+      drawPlayer(pose, distance);
+      for (const obstacle of obstacles) {
+        if (obstacle.depth < pose.fromBottom) drawObstacle(obstacle, distance);
+      }
+    }
+    frame = requestAnimationFrame(render);
+  }
+  return {
+    setVisible(visible) {
+      if (!context || visible === !canvas.hidden) return;
+      canvas.hidden = !visible;
+      if (visible) {
+        if (!run) updatedAt = performance.now();
+        resize();
+        frame = requestAnimationFrame(render);
+      } else {
+        cancelAnimationFrame(frame);
+      }
+    },
+    startRun(startedAt, nextBeat) {
+      advanceWorld(startedAt);
+      beatOrigin = groundDistance;
+      cameraNudge = 0;
+      run = { beats: 0, startedAt, beatMs: nextBeat - startedAt, cue: 0, position: 0, confirmedCue: 0, earlyPress: 0 };
+    },
+    planBeat(beat, color) {
+      if (!run) return;
+      const { everyBeats, cues } = obstacleSettings;
+      if (!everyBeats || (beat - 1) % everyBeats) return;
+      const cue = cues[color];
+      if (!cue) return;
+      obstacles.push({ beat: actionBeat(beat), depth: layout.lanes[cue.lane], type: obstacleTypes[cue.type] });
+    },
+    beat(scheduledAt, nextBeat) {
+      if (!run) return;
+      run.beats++;
+      run.startedAt = scheduledAt;
+      run.beatMs = nextBeat - scheduledAt;
+      advanceWorld(performance.now());
+    },
+    endRun() {
+      if (!run) return;
+      advanceWorld(performance.now());
+      run = null;
+      action = null;
+      actions.length = 0;
+      obstacles.length = 0;
+    },
+    act(color, cueBeat) {
+      if (!run) return;
+      const now = performance.now();
+      advanceWorld(now);
+      const beat = actionBeat(cueBeat);
+      actions.push({ color, beat, obstacle: obstacles.find(obstacle => obstacle.beat === beat) });
+      run.confirmedCue = cueBeat;
+      run.earlyPress = earlyPressStrength(cueBeat, run.cue);
+    }
+  };
+})();

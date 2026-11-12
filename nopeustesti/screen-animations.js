@@ -1,6 +1,6 @@
 /* Distances use LED screen width; frame rate changes the steps, not the speed. */
 const SCREEN_ANIMATIONS = {
-  'scroll-loop': { frameRate: 27, speed: 57, gap: 30 },
+  'scroll-loop': { frameRate: 60, speed: 57, gap: 30 },
   'scroll-stop': { frameRate: 27, speed: 364 },
   'static': { frameRate: 27, speed: 0 }
 };
