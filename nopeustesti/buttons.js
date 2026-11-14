@@ -83,7 +83,7 @@
     pad.style.setProperty('--arrow-press-distance', `${config.pressDistancePx}px`);
     pad.style.setProperty('--arrow-transition', `${config.transitionMs}ms`);
     // Sepia gives the grayscale art a warm base hue to rotate from.
-    const tint = config.frameHue === null ? '' : `sepia(1) saturate(2) hue-rotate(${config.frameHue - 45}deg) `;
+    const tint = config.frameHue === null ? '' : `sepia(1) saturate(${config.frameSaturation}) hue-rotate(${config.frameHue - 45}deg) `;
     pad.style.setProperty('--arrow-frame-filter', `${tint}brightness(${config.frameBrightness})`);
   }
   for (const slot of config.order) {
