@@ -12,9 +12,9 @@ const OBSTACLE_SETTINGS = {
     cactus: { file: 'cactus.png', size: 0.34 }
   },
   cues: {
-    green: { type: 'spike', lane: 'center' }, // jump
-    red: { type: 'spikechain', lane: 'center' }, // roll
-    yellow: { type: 'cactus', lane: 'right' }, // dodge left
-    blue: { type: 'cactus', lane: 'left' } // dodge right
+    blue: { type: 'spike', lane: 'center' }, // jump
+    yellow: { type: 'spikechain', lane: 'center' }, // roll
+    green: { type: 'cactus', lane: 'right' }, // dodge left
+    red: { type: 'cactus', lane: 'left' } // dodge right
   }
 };

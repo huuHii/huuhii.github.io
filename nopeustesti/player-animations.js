@@ -4,10 +4,10 @@ const PLAYER_ANIMATION_SETTINGS = {
   // Times are in beats. The pose holds until both the minimum and obstacle clearance are met.
   // Lane offsets are fractions of display width; jump height is a fraction of display height.
   actions: {
-    yellow: { lane: 'left', xOffset: 0.02, enterBeats: 0.17, holdBeats: 0.08, returnBeats: 0.18 },
-    blue: { lane: 'right', xOffset: -0.02, enterBeats: 0.17, holdBeats: 0.08, returnBeats: 0.18 },
-    green: { lift: 0.19, enterBeats: 0.22, holdBeats: 0.06, returnBeats: 0.22 },
-    red: { heightScale: 0.38, turnsPerBeat: 1.5, enterBeats: 0.16, holdBeats: 0.08, returnBeats: 0.18 }
+    green: { lane: 'left', xOffset: 0.02, enterBeats: 0.17, holdBeats: 0.08, returnBeats: 0.18 },
+    red: { lane: 'right', xOffset: -0.02, enterBeats: 0.17, holdBeats: 0.08, returnBeats: 0.18 },
+    blue: { lift: 0.19, enterBeats: 0.22, holdBeats: 0.06, returnBeats: 0.22 },
+    yellow: { heightScale: 0.38, turnsPerBeat: 1.5, enterBeats: 0.16, holdBeats: 0.08, returnBeats: 0.18 }
   }
 };
 

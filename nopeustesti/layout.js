@@ -1,6 +1,6 @@
 /* Width drives desired size; available height caps it to keep the layout on screen. */
 const GAME_LAYOUT = {
-  landscape: { maxLayoutAspectRatio: 2.2, screenWidth: 50, screenAspectRatio: 538 / 212, buttonToScreen: .37, boltToScreen: 0.08, screenBottomAnchor: 50, minScreenButtonGap: 5, sidePadding: 3, bottomPadding: 5, buttonGap: 1 },
+  landscape: { maxLayoutAspectRatio: 2.2, screenWidth: 50, screenAspectRatio: 538 / 212, buttonToScreen: .37, boltToScreen: 0.08, screenBottomAnchor: 50, minScreenButtonGap: 5, sidePadding: 3, bottomPadding: 5, buttonGap: 0 },
   portrait:  { maxLayoutAspectRatio: 0.8, screenWidth: 85, screenAspectRatio: 538 / 212, buttonToScreen: 0.55, boltToScreen: 0.08, screenBottomAnchor: 40, minScreenButtonGap: 5, sidePadding: 5, bottomPadding: 8, buttonGap: 2 },
   bolts: { inset: 5 }
 };

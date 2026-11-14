@@ -4,7 +4,7 @@ const GAME_AUDIO = {
   beepVolume: 5,
   maxVolume: 5,
   sounds: { press: 'button-press.wav', release: 'button-release.wav', gameOver: 'gameover.wav' },
-  tones: { red: 'd#3_1.wav', yellow: 'g#3_1.wav', blue: 'd#4_1.wav', green: 'g#4_1.wav' }
+  tones: { red: 'g#3_1.wav', yellow: 'd#3_1.wav', blue: 'g#4_1.wav', green: 'd#4_1.wav' }
 };
 (() => {
   let context;
