@@ -2,6 +2,12 @@
   const world = document.querySelector('.camera-menu-world');
   const hud = document.querySelector('.game-hud-position');
   const footer = hud.querySelector('.screen-bottom-row');
+  const runBar = hud.querySelector('.run-bar');
+  const results = hud.querySelector('.run-results');
+  const resultScore = results.querySelector('.run-results-score');
+  const resultAnimal = results.querySelector('.run-results-animal');
+  const resultsTrack = results.querySelector('.run-results-track');
+  const milestones = [...SPEED_MILESTONES].sort((a, b) => a.taps - b.taps);
   const announcement = document.querySelector('.menu-announcement');
   const practiceSpeeds = PRACTICE_MENU.startingSpeeds;
   const standbyIdleSeconds = 5;
@@ -75,9 +81,10 @@
     const target = panels.get(id);
     const header = element('header', 'camera-panel-heading');
     const label = element('div');
-    label.append(element('p', 'camera-caption', config.caption), element('h2', '', config.title));
+    const captionClass = config.caption ? 'camera-caption' : 'camera-caption camera-counter';
+    label.append(element('p', captionClass, config.caption ?? counter), element('h2', '', config.title));
     header.append(label);
-    if (counter) header.append(element('span', 'camera-caption camera-counter', counter));
+    if (config.caption && counter) header.append(element('span', 'camera-caption camera-counter', counter));
     const nav = element('div', 'camera-panel-nav');
     nav.append(...hints);
     target.replaceChildren(header, content, nav);
@@ -115,11 +122,12 @@
     });
     const adjust = hint('right', 'ADJUST');
     adjust.prepend(arrow('left'));
-    drawPanel('settings', SETTINGS_MENU, list, [
-      hint('up', settingsIndex === 0 ? 'SURFACE' : 'PREV'),
-      settingsIndex < rows.length - 1 ? hint('down', 'NEXT') : element('span'),
-      adjust
-    ], counter(settingsIndex, rows.length));
+    const atTop = settingsIndex === 0;
+    const vertical = hint('down', atTop ? 'Down' : 'Up/Down');
+    const hints = [adjust, vertical];
+    if (atTop) hints.push(hint('up', 'RETURN'));
+    else vertical.append(arrow('up'));
+    drawPanel('settings', SETTINGS_MENU, list, hints, counter(settingsIndex, rows.length));
   }
 
   const characterList = element('ul', 'character-menu-list');
@@ -172,7 +180,7 @@
       content.append(table);
     }
     drawPanel('highscores', HIGHSCORES_MENU, content, [
-      hint('down', 'SURFACE'), hint('up', 'STATS')
+      hint('down', 'RETURN'), hint('up', 'STATS')
     ]);
   }
 
@@ -192,7 +200,7 @@
       ));
       list.append(card);
     }
-    drawPanel('statistics', STATISTICS_MENU, list, [hint('down', 'HIGHSCORES')]);
+    drawPanel('statistics', STATISTICS_MENU, list, [hint('left', 'RETURN'), hint('down', 'HIGHSCORES')]);
   }
 
   function drawPractice() {
@@ -202,20 +210,60 @@
     const speed = hint('up', 'SPEED');
     speed.append(arrow('down'));
     drawPanel('practice', PRACTICE_MENU, content, [
-      hint('left', 'SURFACE'), speed, hint('right', 'START')
+      hint('left', 'RETURN'), speed, hint('right', 'START')
     ], counter(practiceIndex, practiceSpeeds.length));
   }
 
-  function drawHome() {
-    MenuCamera.place(hud, 'home');
-    hud.hidden = false;
+  function drawHomeOptions() {
     footer.dataset.view = 'standard';
     const scores = hint('up', 'SCORES');
-    scores.append(icon('led-star'), element('span', '', number.format(GameRecords.highscore)));
+    if (runBar.hidden) scores.append(icon('led-star'), element('span', '', number.format(GameRecords.highscore)));
     scores.setAttribute('aria-label', `Up: highscores, best ${GameRecords.highscore}`);
     footer.replaceChildren(hint('left', 'RUNNER'), scores, hint('down', 'SETTINGS'), hint('right', 'PLAY'));
-    const rightArrow = { icon: 'led-arrow led-arrow-right', label: 'right arrow' };
-    ScreenText.titleLoop('STANDARD', ['PRESS ', rightArrow, ' TO START  /  HOLD ', rightArrow, ' FOR PRACTICE']);
+  }
+
+  function drawHome({ result, welcome = false } = {}) {
+    MenuCamera.place(hud, 'home');
+    hud.hidden = false;
+    footer.hidden = false;
+    if (result) {
+      drawHomeOptions();
+      drawResults(result);
+    } else {
+      const rightArrow = { icon: 'led-arrow led-arrow-right', label: 'right arrow' };
+      const instructions = ['PRESS ', rightArrow, ' TO START  /  HOLD ', rightArrow, ' FOR PRACTICE'];
+      if (welcome) {
+        footer.dataset.view = 'welcome';
+        footer.replaceChildren(element('span', 'app-version', 'v2 6.11.2026'));
+        ScreenText.titleLoop('WELCOME', instructions, {
+          holdSeconds: SCREEN_SEQUENCE_SETTINGS['title-loop'].welcomeHoldSeconds,
+          onLoopStart: drawHomeOptions
+        });
+      } else {
+        drawHomeOptions();
+        ScreenText.titleLoop('STANDARD', instructions);
+      }
+    }
+  }
+
+  function drawResults({ score, speed, timeMs }) {
+    const reached = milestones.findLast(milestone => milestone.taps <= score);
+    const next = milestones.find(milestone => milestone.taps > score);
+    resultScore.textContent = number.format(score);
+    resultAnimal.textContent = reached ? `${reached.animal} speed reached` : 'No animal milestone reached';
+    const copy = element('div', 'run-results-copy');
+    copy.append(
+      element('span', '', `Total time: ${formatRunTime(timeMs)}`),
+      element('span', '', `Speed reached: ${speed} taps/min`),
+      element('span', '', next
+        ? `Taps away from next milestone: ${next.taps - score} (${next.animal})`
+        : 'All animal milestones reached')
+    );
+    const duplicate = copy.cloneNode(true);
+    duplicate.setAttribute('aria-hidden', 'true');
+    resultsTrack.replaceChildren(copy, duplicate);
+    ScreenText.clear();
+    results.hidden = false;
   }
 
   function draw(target) {
@@ -225,13 +273,15 @@
   function blocksInput() {
     return startingUp || MenuCamera.moving || performance.now() < lockedUntil;
   }
-  function enterHome() {
+  function enterHome(options) {
     Platformer.enterRunner(runners[runnerIndex], 'home');
-    drawHome();
+    drawHome(options);
   }
   function go(target) {
     cancelHold();
     ScreenText.clear();
+    results.hidden = true;
+    runBar.hidden = true;
     if (target === 'characters') Platformer.previewRunner(runners[runnerIndex]);
     if (target === 'practice') {
       Platformer.setPracticeTempo(GameRules.bpmAt(practiceSpeeds[practiceIndex]));
@@ -250,7 +300,7 @@
       if (view === 'home') enterHome();
       else if (view === 'practice') Platformer.enterRunner(runners[runnerIndex], 'practice');
       else Platformer.hideRunner();
-      announcement.textContent = view === 'home' ? 'Surface' : panels.get(view).getAttribute('aria-label');
+      announcement.textContent = view === 'home' ? 'RETURN' : panels.get(view).getAttribute('aria-label');
     });
   }
   function startPractice() {
@@ -304,19 +354,12 @@
     const direction = directions[color];
     if (!direction) return;
     cancelHold();
-    const phase = window.GameSession?.phase;
-    if (phase === 'result' || phase === 'practice-result') {
+    if (GameSession.phase === 'practice-result') {
       if (direction === 'right') {
-        if (phase === 'practice-result') startPractice();
-        else document.dispatchEvent(new CustomEvent('game-start-request'));
+        startPractice();
       } else if (direction === 'left') {
         GameSession.leave();
-        if (phase === 'practice-result') {
-          go('home');
-        } else {
-          selectPanel('home');
-          enterHome();
-        }
+        go('home');
         GameLights.standby(standbyIdleSeconds);
       }
       return;
@@ -356,7 +399,8 @@
       if (direction === 'down') go('home');
       if (direction === 'up') go('statistics');
     } else if (view === 'statistics') {
-      if (direction === 'down') go('highscores');
+      if (direction === 'left') go('home');
+      else if (direction === 'down') go('highscores');
     } else if (view === 'practice') {
       if (direction === 'left') go('home');
       else if (direction === 'right') startPractice();
@@ -376,10 +420,11 @@
       startingUp = false;
       Platformer.setVisible(true);
       selectPanel('home');
-      enterHome();
+      enterHome({ welcome: true });
       GameLights.standby();
     },
     restoreAfterReady() {
+      runBar.hidden = true;
       if (view === 'home') enterHome();
       else {
         hud.hidden = true;
@@ -390,8 +435,15 @@
       selectPanel(view);
       GameLights.standby();
     },
+    showRunResults(result) {
+      selectPanel('home');
+      enterHome({ result });
+    },
     prepareForGame(practice) {
       const target = practice ? 'practice' : 'home';
+      results.hidden = true;
+      runBar.hidden = practice;
+      footer.hidden = !practice;
       MenuCamera.place(hud, target);
       panels.get('practice').hidden = true;
       hud.hidden = false;

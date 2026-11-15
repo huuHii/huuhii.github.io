@@ -34,6 +34,11 @@ const screenFontsReady = Promise.allSettled(
     .map(font => document.fonts.load(`16px '${font}'`))
 );
 
+function formatRunTime(timeMs) {
+  const seconds = Math.floor(timeMs / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
 (() => {
   const display = document.querySelector('.score-screen');
   const units = value => `calc(${value} * var(--led-unit, 1cqw))`;

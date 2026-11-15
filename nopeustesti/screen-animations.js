@@ -97,7 +97,7 @@ const SCREEN_SEQUENCE_SETTINGS = {
   }
   function titleLoop(title, loopText, { holdSeconds = SCREEN_SEQUENCE_SETTINGS['title-loop'].holdSeconds, onLoopStart = null } = {}) {
     show(title, motion.matches ? 'static' : 'scroll-stop');
-    if (motion.matches) return;
+    if (motion.matches && !onLoopStart) return;
     sequence = { loopText, holdSeconds, elapsed: 0, onLoopStart };
     scheduleTick();
   }
@@ -110,7 +110,7 @@ const SCREEN_SEQUENCE_SETTINGS = {
     message.replaceChildren();
   }
   function scheduleTick() {
-    if (frame === null && cycle && !document.hidden && !motion.matches && (!stopped || sequence)) {
+    if (frame === null && cycle && !document.hidden && (sequence || (!motion.matches && !stopped))) {
       frame = requestAnimationFrame(tick);
     }
   }
