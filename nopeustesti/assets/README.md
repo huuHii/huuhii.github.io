@@ -6,8 +6,8 @@ Reference them from the game page with paths like `assets/example.png`.
 
 ## UI icon preloading
 
-Small SVG icons used by the interface are preloaded in `../index.html` because
+Small icons used by the interface are preloaded in `../index.html` because
 they are used as CSS masks and may otherwise flash on first use. When adding a
-new UI icon, add a matching `<link rel="preload" as="image" type="image/svg+xml">`
-to the page head. Do not preload every button state or theme image: those larger
+new UI icon mask, add a matching `<link rel="preload" as="image">` with the
+appropriate image type to the page head. Do not preload every button state or theme image: those larger
 assets should load when needed to keep the initial mobile download small.

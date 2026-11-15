@@ -1,5 +1,8 @@
 :root { color-scheme:dark; --game-top:#D15B50; --game-bottom:#B3293E; --bolt-inset:5vmin; --bolt-size:5vh; --screen-tint:#c84a43; --screen-tint-strength:.28; --screen-brightness:1.08; --led-color:#ff2929; --led-glow-color:#ff2020; --led-glow-blur:10px; }
-@font-face { font-family:'DS-DIGIT'; src:url('assets/DS-DIGIT.TTF') format('truetype'); font-style:normal; font-weight:normal; font-display:swap; }
+@font-face { font-family:'DS-DIGIT'; src:url('assets/ui/fonts/DS-DIGIT.TTF') format('truetype'); font-style:normal; font-weight:normal; font-display:swap; }
+@font-face { font-family:'Ari W9500 Display'; src:url('assets/ui/fonts/ari-w9500-display.ttf') format('truetype'); font-style:normal; font-weight:normal; font-display:swap; }
+@font-face { font-family:'Ari W9500 Condensed Display'; src:url('assets/ui/fonts/ari-w9500-condensed-display.ttf') format('truetype'); font-style:normal; font-weight:normal; font-display:swap; }
+@font-face { font-family:'Ari W9500 Bold'; src:url('assets/ui/fonts/ari-w9500-bold.ttf') format('truetype'); font-style:normal; font-weight:normal; font-display:swap; }
 * { box-sizing:border-box; }
 /* This is a touch game; suppress browser selection/tap flashes on the whole UI. */
 html, body, body * { -webkit-tap-highlight-color:transparent; -webkit-touch-callout:none; }
@@ -32,12 +35,14 @@ body { overflow:hidden; background:linear-gradient(180deg,var(--game-top),var(--
 .screen-bottom-right { justify-content:flex-end; }
 .led-icon { display:inline-block; flex:none; width:var(--led-bottom-icon-size, 1.05em); height:var(--led-bottom-icon-size, 1.05em); filter:drop-shadow(0 0 var(--led-glow-blur) var(--led-glow-color)) drop-shadow(0 0 calc(var(--led-glow-blur) * 2) var(--led-glow-color)); }
 .led-icon::before { content:""; display:block; width:100%; height:100%; background:currentColor; -webkit-mask-size:contain; mask-size:contain; -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; -webkit-mask-position:center; mask-position:center; }
-.led-arrow::before { -webkit-mask-image:url('assets/right-arrow-icon.svg'); mask-image:url('assets/right-arrow-icon.svg'); }
-.led-arrow-left { transform:scaleX(-1); }
-.led-arrow-down { transform:rotate(90deg); }
-.led-arrow-up { transform:rotate(-90deg); }
+/* The arrow mask points left in its original orientation. */
+.led-arrow::before { -webkit-mask-image:url('assets/ui/pixel-ui-arrow-left.png'); mask-image:url('assets/ui/pixel-ui-arrow-left.png'); }
+.led-arrow { transform:rotate(180deg); }
+.led-arrow-left { transform:none; }
+.led-arrow-down { transform:rotate(-90deg); }
+.led-arrow-up { transform:rotate(90deg); }
 .screen-bottom-row[data-view="volume"] { grid-template-columns:1fr 1fr 1fr; }
-.led-star::before { -webkit-mask-image:url('assets/highscore-icon.svg'); mask-image:url('assets/highscore-icon.svg'); }
+.led-star::before { -webkit-mask-image:url('assets/ui/pixel-star.png'); mask-image:url('assets/ui/pixel-star.png'); }
 .led-metronome::before { -webkit-mask-image:url('assets/metronome-icon.svg'); mask-image:url('assets/metronome-icon.svg'); }
 .led-practice-start::before { -webkit-mask-image:url('assets/practice-start-icon.svg'); mask-image:url('assets/practice-start-icon.svg'); }
 .practice-metric { display:flex; align-items:center; gap:.25em; }

@@ -1,12 +1,25 @@
 /* Screen typography and glow. The reference width is capped by the display height. */
+const SCREEN_FONTS = {
+  dsDigit: 'DS-DIGIT',
+  ariDisplay: 'Ari W9500 Display',
+  ariCondensed: 'Ari W9500 Condensed Display',
+  ariBold: 'Ari W9500 Bold'
+};
+
+// Change this for the whole screen, or choose a preset for an individual font below.
+const SCREEN_FONT = SCREEN_FONTS.dsDigit;
+const ARIDISPLAY_FONT = SCREEN_FONTS.ariDisplay;
+const ARICONDENSED_FONT = SCREEN_FONTS.ariCondensed;
+const ARIBOLD_FONT = SCREEN_FONTS.ariBold;
+
 const SCREEN_UI_LAYOUT = {
-  mainFont: 'DS-DIGIT',
-  mainFontSize: 14, // percent of screen container width
-  scoreFont: 'DS-DIGIT',
-  scoreFontSize: 18, // percent of screen width, independent of mainFontSize
+  mainFont: ARICONDENSED_FONT,
+  mainFontSize: 8, // percent of screen container width
+  scoreFont: ARIDISPLAY_FONT,
+  scoreFontSize: 10, // percent of screen width, independent of mainFontSize
   mainTextVerticalOffset: 2, // percent of screen width; negative moves up, positive moves down
-  bottomFont: 'DS-DIGIT',
-  bottomFontSize: 4.4, // percent of screen container width
+  bottomFont: ARICONDENSED_FONT,
+  bottomFontSize: 3, // percent of screen container width
   paddingX: 5, // percent of screen width
   paddingTop: 4,
   paddingBottom: 3.7,
@@ -14,6 +27,13 @@ const SCREEN_UI_LAYOUT = {
   letterSpacing: 0.08,
   glowStrength: 0.8
 };
+
+// Load each selected face before the text animation measures it, including the score font.
+const screenFontsReady = Promise.allSettled(
+  [...new Set([SCREEN_UI_LAYOUT.mainFont, SCREEN_UI_LAYOUT.scoreFont, SCREEN_UI_LAYOUT.bottomFont])]
+    .map(font => document.fonts.load(`16px '${font}'`))
+);
+
 (() => {
   const display = document.querySelector('.score-screen');
   const units = value => `calc(${value} * var(--led-unit, 1cqw))`;

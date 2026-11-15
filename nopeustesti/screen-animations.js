@@ -115,7 +115,7 @@ const SCREEN_SEQUENCE_SETTINGS = {
   }
   window.ScreenText = { show, titleLoop, setVisible(visible) { message.style.opacity = visible ? '1' : '0'; } };
   show(message.textContent, message.dataset.animation);
-  document.fonts.ready.then(() => {
+  screenFontsReady.then(() => {
     ready = true;
     measure();
     new ResizeObserver(measure).observe(display);
