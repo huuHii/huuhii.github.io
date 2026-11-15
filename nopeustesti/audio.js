@@ -7,6 +7,17 @@ const GAME_AUDIO = {
   tones: { red: 'd#3_1.wav', yellow: 'g#3_1.wav', blue: 'd#4_1.wav', green: 'g#4_1.wav' }
 };
 (() => {
+  const volumeKey = 'nopeustesti.audio';
+  const channels = ['clackVolume', 'beepVolume'];
+  function applyVolume(channel, value) {
+    if (channels.includes(channel) && Number.isFinite(value)) {
+      GAME_AUDIO[channel] = Math.max(0, Math.min(GAME_AUDIO.maxVolume, value));
+    }
+  }
+  try {
+    const saved = JSON.parse(localStorage.getItem(volumeKey));
+    for (const channel of channels) applyVolume(channel, saved?.[channel]);
+  } catch {}
   let context;
   let activeTone = null;
   let toneRequest = 0;
@@ -110,6 +121,9 @@ const GAME_AUDIO = {
       if (activeTone) { activeTone.stop(); activeTone = null; }
     },
     getVolume: channel => GAME_AUDIO[channel],
-    setVolume(channel, value) { GAME_AUDIO[channel] = Math.max(0, Math.min(GAME_AUDIO.maxVolume, value)); }
+    setVolume(channel, value) {
+      applyVolume(channel, value);
+      try { localStorage.setItem(volumeKey, JSON.stringify(Object.fromEntries(channels.map(key => [key, GAME_AUDIO[key]])))); } catch {}
+    }
   };
 })();

@@ -23,14 +23,5 @@ const GAME_RULES = {
     }
     return Math.max(1, Math.min(GAME_RULES.maxBpm, bpm));
   }
-  let highscore = 0;
-  try { highscore = Math.max(0, Number(localStorage.getItem('nopeustesti.highscore')) || 0); } catch {}
   window.GameRules = { bpmAt };
-  window.GameRecords = {
-    get highscore() { return highscore; },
-    save(score) {
-      highscore = Math.max(highscore, score);
-      try { localStorage.setItem('nopeustesti.highscore', String(highscore)); } catch {}
-    }
-  };
 })();

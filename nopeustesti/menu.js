@@ -1,191 +1,310 @@
-/* Standard is the home screen. Reorder the remaining entries for the red menu cycle. */
-const MENU_ITEMS = [
-  { id: 'standard', title: 'STANDARD', text: 'PRESS GREEN TO PLAY', footer: 'standard', sequence: 'title-loop' },
-  { id: 'practice', title: 'PRACTICE', text: 'SET STARTING SPEED', footer: 'practice', sequence: 'title-loop' },
-  { id: 'clack-volume', text: 'CLACK VOL', channel: 'clackVolume', footer: 'volume' },
-  { id: 'beep-volume', text: 'BEEP VOL', channel: 'beepVolume', footer: 'volume' },
-  { id: 'highscores', text: 'HIGHSCORES: 0', footer: 'menu' }
-];
-const MENU_SETTINGS = { limitFeedbackSeconds: 0.8, standbyIdleSeconds: 5 };
-const PRACTICE_SETTINGS = {
-  startingSpeeds: [100, 200, 300, 400, 500, 600, 700],
-  initialIndex: 0
-};
 (() => {
-  let current = MENU_ITEMS.findIndex(item => item.id === 'standard');
-  let speedIndex = PRACTICE_SETTINGS.initialIndex;
-  let practiceDetail = false;
-  let limitFeedback = null;
-  let limitTimer = null;
-  const footer = document.querySelector('.screen-bottom-row');
+  const world = document.querySelector('.camera-menu-world');
+  const hud = document.querySelector('.game-hud-position');
+  const footer = hud.querySelector('.screen-bottom-row');
+  const announcement = document.querySelector('.menu-announcement');
+  const practiceSpeeds = [100, 200, 300, 400, 500, 600, 700];
+  const standbyIdleSeconds = 5;
+  const characterKey = 'nopeustesti.runner';
+  const directions = { red: 'left', yellow: 'down', blue: 'up', green: 'right' };
+  const panels = new Map();
+  let view = 'home';
+  let lockedUntil = 0;
+  let settingsIndex = 0;
+  let settingsTop = 0;
+  let practiceIndex = 0;
+  let savedRunner;
+  try { savedRunner = localStorage.getItem(characterKey); } catch {}
+  const runners = CHARACTERS_MENU.options;
+  let runnerIndex = runners.findIndex(runner => runner.id === savedRunner);
+  if (runnerIndex < 0) runnerIndex = Math.max(0, runners.findIndex(runner => runner.id === CHARACTERS_MENU.defaultId));
+
+  function element(tag, className, value) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (value !== undefined) node.textContent = String(value);
+    return node;
+  }
   function icon(name) {
-    const span = document.createElement('span');
-    span.className = `led-icon ${name}`;
-    span.setAttribute('aria-hidden', 'true');
-    return span;
+    const node = element('span', `led-icon ${name}`);
+    node.setAttribute('aria-hidden', 'true');
+    return node;
   }
-  function text(value) { const span = document.createElement('span'); span.textContent = value; return span; }
-  function speed() { return PRACTICE_SETTINGS.startingSpeeds[speedIndex]; }
-  function volumeLabel(channel) { return GameAudio.getVolume(channel) || 'OFF'; }
-  function metric(name, value) {
-    const group = document.createElement('span');
-    group.className = 'practice-metric';
-    group.append(icon(name), text(String(value)));
-    return group;
+  function arrow(direction) {
+    return icon(`led-arrow led-arrow-${direction}`);
   }
-  function clearLimit() {
-    clearTimeout(limitTimer);
-    limitTimer = null;
-    limitFeedback = null;
+  function hint(direction, label, right = direction === 'right') {
+    const node = element('span', 'camera-hint');
+    const words = element('span', '', label);
+    node.append(...(right ? [words, arrow(direction)] : [arrow(direction), words]));
+    return node;
   }
-  function renderValue() {
-    const item = MENU_ITEMS[current];
-    if (item.id === 'practice' && practiceDetail) {
-      ScreenText.show(String(limitFeedback || speed()), 'static', { icon: 'led-practice-start' });
-    } else if (item.channel) {
-      ScreenText.show(`${item.text}: ${limitFeedback || volumeLabel(item.channel)}`, 'static');
-    }
+  function panel(id, config) {
+    const section = element('section', 'camera-panel');
+    section.dataset.menu = id;
+    section.setAttribute('aria-label', config.title);
+    section.setAttribute('aria-hidden', 'true');
+    MenuCamera.place(section, id);
+    world.append(section);
+    panels.set(id, section);
+    return section;
   }
-  function showLimit(label) {
-    clearLimit();
-    limitFeedback = label;
-    renderValue();
-    limitTimer = setTimeout(() => {
-      limitTimer = null;
-      limitFeedback = null;
-      renderValue();
-    }, MENU_SETTINGS.limitFeedbackSeconds * 1000);
+  const practiceMenu = { title: 'PRACTICE', caption: 'SET STARTING SPEED' };
+  panel('settings', SETTINGS_MENU);
+  panel('characters', CHARACTERS_MENU);
+  panel('highscores', HIGHSCORES_MENU);
+  panel('statistics', STATISTICS_MENU);
+  panel('practice', practiceMenu);
+
+  function drawPanel(id, config, content, hints, counter = '') {
+    const target = panels.get(id);
+    const header = element('header', 'camera-panel-heading');
+    const label = element('div');
+    label.append(element('p', 'camera-caption', config.caption), element('h2', '', config.title));
+    header.append(label);
+    if (counter) header.append(element('span', 'camera-caption camera-counter', counter));
+    const nav = element('div', 'camera-panel-nav');
+    nav.append(...hints);
+    target.replaceChildren(header, content, nav);
   }
-  function renderFooter(item) {
-    Platformer.setVisible(item.id === 'standard');
-    const left = document.createElement('span');
-    const middle = document.createElement('span');
-    const right = document.createElement('span');
-    left.className = 'screen-bottom-item screen-bottom-left';
-    middle.className = 'screen-bottom-item screen-bottom-center';
-    right.className = 'screen-bottom-item screen-bottom-right';
-    left.append(icon('led-arrow led-arrow-left'));
-    let leftText = 'MENU';
-    let rightText = item.id === 'standard' ? 'PLAY' : 'RETURN';
-    if (item.footer === 'volume') {
-      middle.append(icon('led-arrow led-arrow-down'), text('VOLUME'), icon('led-arrow led-arrow-up'));
-    } else if (item.footer === 'practice') {
-      if (practiceDetail) {
-        leftText = 'RETURN';
-        rightText = 'PRACTICE';
-        middle.append(metric('led-metronome', Math.round(GameRules.bpmAt(speed()))));
-        middle.setAttribute('aria-label', `BPM ${Math.round(GameRules.bpmAt(speed()))}`);
-      } else {
-        middle.append(icon('led-arrow led-arrow-down'), text('SPEED'), icon('led-arrow led-arrow-up'));
+  function selectPanel(id) {
+    for (const [name, panel] of panels) panel.setAttribute('aria-hidden', String(id !== name));
+    hud.setAttribute('aria-hidden', String(id !== 'home'));
+  }
+  const number = new Intl.NumberFormat();
+  const average = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
+  const date = new Intl.DateTimeFormat(undefined, HIGHSCORES_MENU.dateFormat);
+  const counter = (index, total) => `${String(index + 1).padStart(2, '0')} / ${String(total).padStart(2, '0')}`;
+
+  function drawSettings() {
+    const { rows, visibleRows } = SETTINGS_MENU;
+    const list = element('ul', 'settings-menu-list');
+    list.style.setProperty('--settings-visible-rows', visibleRows);
+    rows.slice(settingsTop, settingsTop + visibleRows).forEach((setting, offset) => {
+      const selected = settingsIndex === settingsTop + offset;
+      const row = element('li', 'camera-list-row');
+      if (selected) row.setAttribute('aria-current', 'true');
+      const value = GameAudio.getVolume(setting.channel);
+      const meter = element('span', 'settings-meter');
+      meter.setAttribute('aria-hidden', 'true');
+      for (let i = 0; i < GAME_AUDIO.maxVolume; i++) {
+        meter.append(element('span', i < value ? 'is-filled' : ''));
       }
-    } else {
-      middle.append(icon('led-star'), text(String(GameRecords.highscore)));
-      middle.setAttribute('aria-label', `Highscore ${GameRecords.highscore}`);
-    }
-    if (leftText) left.append(text(leftText));
-    right.append(text(rightText), icon('led-arrow'));
-    footer.dataset.view = item.footer;
-    footer.replaceChildren(left, middle, right);
+      row.append(element('span', 'camera-row-label', setting.label), meter,
+        element('span', 'camera-row-value', value || 'OFF'));
+      list.append(row);
+    });
+    const adjust = hint('right', 'ADJUST');
+    adjust.prepend(arrow('left'));
+    drawPanel('settings', SETTINGS_MENU, list, [
+      hint('up', settingsIndex === 0 ? 'SURFACE' : 'PREV'),
+      settingsIndex < rows.length - 1 ? hint('down', 'NEXT') : element('span'),
+      adjust
+    ], counter(settingsIndex, rows.length));
   }
-  function enter({ boot = false } = {}) {
-    clearLimit();
-    practiceDetail = false;
-    const item = MENU_ITEMS[current];
-    renderFooter(item);
-    if (boot) {
-      const version = document.createElement('span');
-      version.textContent = 'v2 6.11.2026';
-      version.className = 'app-version';
-      const welcomeVersion = document.createElement('span');
-      welcomeVersion.className = 'screen-bottom-item screen-bottom-right welcome-version';
-      welcomeVersion.append(version);
-      footer.replaceChildren(welcomeVersion);
+
+  function drawCharacters() {
+    const list = element('ul', 'character-menu-list');
+    for (const shift of [-1, 0, 1]) {
+      const runner = runners[(runnerIndex + shift + runners.length) % runners.length];
+      const row = element('li', 'camera-list-row', runner.name);
+      if (shift === 0) row.setAttribute('aria-current', 'true');
+      else row.setAttribute('aria-hidden', 'true');
+      list.append(row);
     }
-    if (item.sequence === 'title-loop') {
-      const timing = SCREEN_SEQUENCE_SETTINGS['title-loop'];
-      const holdSeconds = boot ? timing.welcomeHoldSeconds : item.id === 'practice' ? timing.practiceHoldSeconds : timing.holdSeconds;
-      ScreenText.titleLoop(boot ? 'WELCOME' : item.title, item.text, { holdSeconds, onLoopStart: boot ? () => { renderFooter(item); } : undefined });
-    } else {
-      const heading = item.id === 'highscores' ? `HIGHSCORES: ${GameRecords.highscore}` : item.channel ? `${item.text}: ${volumeLabel(item.channel)}` : item.text;
-      ScreenText.show(heading, item.animation || 'scroll-stop');
-    }
+    const cycle = hint('up', 'BROWSE');
+    cycle.append(arrow('down'));
+    drawPanel('characters', CHARACTERS_MENU, list, [
+      cycle, hint('right', 'SELECT & RETURN')
+    ], counter(runnerIndex, runners.length));
   }
-  function resumeStandbyAfterIdle() {
-    GameLights.standby(MENU_SETTINGS.standbyIdleSeconds);
+
+  function drawHighscores() {
+    const entries = GameRecords.entries;
+    const content = element('div', 'records-content');
+    if (!entries.length) {
+      content.append(element('p', 'records-empty', 'NO RUNS ON RECORD'));
+    } else {
+      const table = element('table', 'scores-table');
+      table.setAttribute('aria-label', 'Local highscore entries');
+      const columns = table.createTHead().insertRow();
+      for (const label of ['#', 'PROFILE', 'SCORE', 'DATE']) {
+        const heading = element('th', '', label);
+        heading.scope = 'col';
+        columns.append(heading);
+      }
+      const rows = table.createTBody();
+      entries.forEach((entry, index) => {
+        const row = rows.insertRow();
+        for (const value of [
+          index + 1,
+          entry.profile ?? '—',
+          number.format(entry.score),
+          entry.date ? date.format(new Date(entry.date)) : '—'
+        ]) row.append(element('td', '', value));
+      });
+      content.append(table);
+    }
+    drawPanel('highscores', HIGHSCORES_MENU, content, [
+      hint('down', 'SURFACE'), hint('up', 'STATS'), hint('right', 'PRACTICE')
+    ]);
+  }
+
+  function duration(ms) {
+    const seconds = Math.floor(ms / 1000);
+    const fields = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60];
+    return fields.map(value => String(value).padStart(2, '0')).join(':');
+  }
+  function drawStatistics() {
+    const stats = GameRecords.statistics;
+    const list = element('dl', 'stats-menu-grid');
+    for (const { label, key, format } of STATISTICS_MENU.rows) {
+      const value = stats[key];
+      const card = element('div', 'camera-stat');
+      card.append(element('dt', '', label), element('dd', '',
+        format === 'time' ? duration(value) : format === 'average' ? average.format(value) : number.format(value)
+      ));
+      list.append(card);
+    }
+    drawPanel('statistics', STATISTICS_MENU, list, [hint('down', 'HIGHSCORES')]);
+  }
+
+  function drawPractice() {
+    const content = element('div', 'practice-menu-value');
+    content.append(element('strong', '', practiceSpeeds[practiceIndex]),
+      element('span', '', `${Math.round(GameRules.bpmAt(practiceSpeeds[practiceIndex]))} BPM`));
+    const speed = hint('up', 'SPEED');
+    speed.append(arrow('down'));
+    drawPanel('practice', practiceMenu, content, [
+      hint('left', 'HIGHSCORES'), speed, hint('right', 'PRACTICE')
+    ], counter(practiceIndex, practiceSpeeds.length));
+  }
+
+  function drawHome() {
+    MenuCamera.place(hud, 'home');
+    hud.hidden = false;
+    footer.dataset.view = 'standard';
+    const scores = hint('up', 'SCORES');
+    scores.append(icon('led-star'), element('span', '', number.format(GameRecords.highscore)));
+    scores.setAttribute('aria-label', `Up: highscores, best ${GameRecords.highscore}`);
+    footer.replaceChildren(hint('left', 'RUNNER'), scores, hint('down', 'SETTINGS'), hint('right', 'PLAY'));
+    ScreenText.titleLoop('STANDARD', 'PRESS RIGHT TO RUN');
+  }
+
+  function draw(target) {
+    ({ home: drawHome, settings: drawSettings, characters: drawCharacters,
+      highscores: drawHighscores, statistics: drawStatistics, practice: drawPractice })[target]();
+  }
+  function blocksInput() {
+    return MenuCamera.moving || performance.now() < lockedUntil;
+  }
+  function enterHome() {
+    Platformer.enterHome(runners[runnerIndex]);
+    drawHome();
+  }
+  function go(target) {
+    if (target !== 'home') draw(target);
+    MenuCamera.move(target, () => {
+      view = target;
+      lockedUntil = performance.now() + MENU_TRANSITIONS.settleMs;
+      selectPanel(view);
+      if (view === 'home') enterHome();
+      else Platformer.hideHome();
+      announcement.textContent = view === 'home' ? 'Surface' : panels.get(view).getAttribute('aria-label');
+    });
   }
   function startPractice() {
-    document.dispatchEvent(new CustomEvent('practice-start-request', { detail: { startingSpeed: speed(), bpm: speed() } }));
+    document.dispatchEvent(new CustomEvent('practice-start-request', { detail: { startingSpeed: practiceSpeeds[practiceIndex] } }));
   }
-  document.addEventListener('game-button-press', event => {
-    if (window.GameSession?.blocksMenu) return;
-    const color = event.detail.color;
+
+  document.addEventListener('game-button-press', ({ detail: { color } }) => {
+    if (blocksInput() || window.GameSession?.blocksMenu) return;
+    const direction = directions[color];
+    if (!direction) return;
     const phase = window.GameSession?.phase;
     if (phase === 'result' || phase === 'practice-result') {
-      if (color !== 'red' && color !== 'green') return;
-      if (phase === 'practice-result') {
-        if (color === 'green') startPractice();
-        else {
-          GameSession.leave();
-          current = MENU_ITEMS.findIndex(item => item.id === 'practice');
-          practiceDetail = true;
-          renderFooter(MENU_ITEMS[current]);
-          renderValue();
-          resumeStandbyAfterIdle();
+      if (direction === 'right') {
+        if (phase === 'practice-result') startPractice();
+        else document.dispatchEvent(new CustomEvent('game-start-request'));
+      } else if (direction === 'left') {
+        GameSession.leave();
+        if (phase === 'practice-result') {
+          hud.hidden = true;
+          panels.get('practice').hidden = false;
+          Platformer.setVisible(true);
+          selectPanel('practice');
+          drawPractice();
+        } else {
+          selectPanel('home');
+          enterHome();
         }
-        return;
+        GameLights.standby(standbyIdleSeconds);
       }
-      if (color === 'red') GameSession.leave();
+      return;
     }
-    const item = MENU_ITEMS[current];
-    if (color === 'red') {
-      if (item.id === 'practice' && practiceDetail) enter();
-      else { current = (current + 1) % MENU_ITEMS.length; enter(); }
-      resumeStandbyAfterIdle();
-    } else if (color === 'green') {
-      if (item.id === 'practice' && practiceDetail) {
-        startPractice();
-      } else if (item.id === 'standard') {
-        document.dispatchEvent(new CustomEvent('game-start-request'));
+    GameLights.standby(standbyIdleSeconds);
+    if (view === 'home') {
+      if (direction === 'right') document.dispatchEvent(new CustomEvent('game-start-request'));
+      else go({ left: 'characters', down: 'settings', up: 'highscores' }[direction]);
+    } else if (view === 'settings') {
+      const { rows, visibleRows } = SETTINGS_MENU;
+      if (direction === 'up' && settingsIndex === 0) return go('home');
+      if (direction === 'up' || direction === 'down') {
+        settingsIndex = Math.min(rows.length - 1, settingsIndex + (direction === 'up' ? -1 : 1));
+        settingsTop = Math.max(settingsIndex - visibleRows + 1, Math.min(settingsTop, settingsIndex));
       } else {
-        current = MENU_ITEMS.findIndex(entry => entry.id === 'standard');
-        enter();
-        resumeStandbyAfterIdle();
+        const { channel, preview } = rows[settingsIndex];
+        GameAudio.setVolume(channel, GameAudio.getVolume(channel) + (direction === 'right' ? 1 : -1));
+        if (preview) GameAudio.tone(color);
       }
-    } else {
-      const delta = color === 'yellow' ? -1 : color === 'blue' ? 1 : 0;
-      if (!delta) return;
-      if (item.id === 'practice') {
-        resumeStandbyAfterIdle();
-        if (!practiceDetail) {
-          practiceDetail = true;
-          clearLimit();
-          renderFooter(item);
-          renderValue();
-          return; // First down/up press reveals the remembered speed without changing it.
-        }
-        const next = speedIndex + delta;
-        practiceDetail = true;
-        clearLimit();
-        if (next >= 0 && next < PRACTICE_SETTINGS.startingSpeeds.length) speedIndex = next;
-        renderFooter(item);
-        if (next < 0 || next >= PRACTICE_SETTINGS.startingSpeeds.length) showLimit(next < 0 ? 'MIN' : 'MAX');
-        else renderValue();
-      } else if (item.channel) {
-        resumeStandbyAfterIdle();
-        const next = GameAudio.getVolume(item.channel) + delta;
-        clearLimit();
-        GameAudio.setVolume(item.channel, next);
-        if (next > GAME_AUDIO.maxVolume) showLimit('MAX');
-        else renderValue();
-        if (item.channel === 'beepVolume') GameAudio.tone(color);
+      drawSettings();
+      const { label, channel } = rows[settingsIndex];
+      announcement.textContent = `${label}: ${GameAudio.getVolume(channel) || 'off'}`;
+    } else if (view === 'characters') {
+      if (direction === 'right') {
+        try { localStorage.setItem(characterKey, runners[runnerIndex].id); } catch {}
+        go('home');
+      } else if (direction === 'up' || direction === 'down') {
+        const step = direction === 'down' ? 1 : -1;
+        const previous = runners[runnerIndex];
+        runnerIndex = (runnerIndex + step + runners.length) % runners.length;
+        Platformer.previewRunner(runners[runnerIndex], { previous, step });
+        drawCharacters();
+        announcement.textContent = runners[runnerIndex].name;
+      }
+    } else if (view === 'highscores') {
+      if (direction === 'down') go('home');
+      if (direction === 'up') go('statistics');
+      if (direction === 'right') go('practice');
+    } else if (view === 'statistics') {
+      if (direction === 'down') go('highscores');
+    } else if (view === 'practice') {
+      if (direction === 'left') go('highscores');
+      else if (direction === 'right') startPractice();
+      else {
+        practiceIndex = Math.max(0, Math.min(practiceSpeeds.length - 1, practiceIndex + (direction === 'up' ? 1 : -1)));
+        drawPractice();
+        announcement.textContent = `Starting speed ${practiceSpeeds[practiceIndex]}`;
       }
     }
   });
+
   window.GameMenu = {
-    get current() { return MENU_ITEMS[current].id; },
-    get practiceSpeed() { return speed(); },
-    prepareForGame: clearLimit
+    get current() { return view; },
+    get blocksInput() { return blocksInput(); },
+    prepareForGame(practice) {
+      const target = practice ? 'practice' : 'home';
+      MenuCamera.place(hud, target);
+      panels.get('practice').hidden = practice;
+      hud.hidden = false;
+      hud.removeAttribute('aria-hidden');
+      Platformer.setVisible(!practice);
+    }
   };
-  enter({ boot: true });
+  GameButtons.setInputGuard(blocksInput);
+  Platformer.previewRunner(runners[runnerIndex]);
+  Platformer.setVisible(true);
+  selectPanel('home');
+  enterHome();
   GameLights.standby();
 })();

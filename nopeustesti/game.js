@@ -7,6 +7,7 @@
   let startingScore = 0, beats = 0, queue = [], lastColor = null;
   const plannedColors = [];
   let beatTimer = null, session = 0, nextBeat = 0;
+  let runStartedAt = 0, taps = 0;
   function element(className, value) {
     const node = document.createElement('span');
     node.className = className;
@@ -65,7 +66,7 @@
     clearTimeout(beatTimer);
     Platformer.endRun();
     GameAudio.stopTone();
-    if (!practice) GameRecords.save(score);
+    if (!practice) GameRecords.saveRun({ score, taps, timeMs: performance.now() - runStartedAt });
     ScreenText.show(String(score), 'static', { variant: 'score' });
     GameAudio.gameOver();
     renderFooter(true);
@@ -115,13 +116,15 @@
     }, Math.max(0, nextBeat - performance.now()));
   }
   function start(isPractice, selectedScore = 0) {
-    if (window.GameSession.blocksMenu) return;
+    if (window.GameSession.blocksMenu || GameMenu.blocksInput ||
+      GameMenu.current !== (isPractice ? 'practice' : 'home')) return;
     leave();
-    GameMenu.prepareForGame();
+    GameMenu.prepareForGame(isPractice);
     practice = isPractice;
     startingScore = isPractice ? selectedScore : 0;
     score = startingScore;
     beats = 0;
+    taps = 0;
     lastColor = null;
     plannedColors.length = 0;
     bpm = GameRules.bpmAt(startingScore);
@@ -136,6 +139,7 @@
       phase = 'playing';
       ScreenText.show(String(score), 'static', { variant: 'score' });
       const startedAt = performance.now();
+      runStartedAt = startedAt;
       nextBeat = startedAt + 60000 / bpm;
       if (!practice) {
         Platformer.startRun(startedAt, nextBeat);
@@ -149,7 +153,9 @@
   document.addEventListener('game-start-request', () => start(false));
   document.addEventListener('practice-start-request', event => start(true, event.detail.startingSpeed));
   document.addEventListener('game-button-press', event => {
-    if (phase !== 'playing' || !queue.length) return;
+    if (phase !== 'playing') return;
+    taps++;
+    if (!queue.length) return;
     if (event.detail.color !== queue[0]) { finish(); return; }
     queue.shift();
     if (!practice) Platformer.act(event.detail.color, beats - queue.length);

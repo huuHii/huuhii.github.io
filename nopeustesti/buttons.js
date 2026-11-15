@@ -15,6 +15,7 @@
   const pad = document.querySelector('.button-pad');
   const states = new Map();
   let menuFeedback = true;
+  let inputGuard = () => false;
   function sprite(src, className = '') {
     const image = new Image();
     image.alt = '';
@@ -70,7 +71,7 @@
   }
   function render(state) {
     const pressed = state.holds.size > 0;
-    const lit = state.lit || (menuFeedback && pressed);
+    const lit = state.lit || (menuFeedback && pressed && state.accepted);
     state.renderArt(lit, pressed);
     state.button.setAttribute('aria-pressed', String(pressed));
   }
@@ -78,8 +79,9 @@
     if (state.holds.has(id)) return;
     const wasHeld = state.holds.size > 0;
     state.holds.add(id);
+    if (!wasHeld) state.accepted = !inputGuard();
     render(state);
-    if (!wasHeld) {
+    if (!wasHeld && state.accepted) {
       GameAudio.press();
       document.dispatchEvent(new CustomEvent('game-button-press', { detail: { color: state.color } }));
     }
@@ -87,7 +89,8 @@
   function release(state, id) {
     if (!state.holds.delete(id)) return;
     render(state);
-    if (!state.holds.size) {
+    if (!state.holds.size && state.accepted) {
+      state.accepted = false;
       GameAudio.release();
       document.dispatchEvent(new CustomEvent('game-button-release', { detail: { color: state.color } }));
     }
@@ -111,10 +114,11 @@
     button.type = 'button';
     button.className = 'game-button';
     button.dataset.color = color;
-    button.setAttribute('aria-label', color[0].toUpperCase() + color.slice(1));
+    const label = arrows ? slot : color;
+    button.setAttribute('aria-label', label[0].toUpperCase() + label.slice(1));
     button.setAttribute('aria-keyshortcuts', shortcuts[color].join(' '));
     const renderArt = arrows ? mountArrows(button, slot) : mountLegacy(button, color);
-    const state = { color, button, renderArt, lit: false, holds: new Set() };
+    const state = { color, button, renderArt, lit: false, accepted: false, holds: new Set() };
     states.set(color, state);
     render(state);
     pad.append(button);
@@ -161,6 +165,7 @@
     get colorsInOrder() { return [...states.keys()]; },
     setLit(color, lit) { const state = states.get(color); if (state) { state.lit = lit; render(state); } },
     setMenuFeedback(enabled) { menuFeedback = enabled; states.forEach(render); },
+    setInputGuard(guard) { inputGuard = guard; },
     releaseAll
   };
 })();
