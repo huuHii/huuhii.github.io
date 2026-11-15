@@ -11,10 +11,11 @@ const SCREEN_SEQUENCE_SETTINGS = {
 (() => {
   const display = document.querySelector('.score-screen');
   const message = document.querySelector('.screen-message');
+  const motion = matchMedia('(prefers-reduced-motion: reduce)');
   const track = document.createElement('span');
   track.className = 'scroll-loop-track';
   track.setAttribute('aria-hidden', 'true');
-  let copy, animation, settings, ready = false;
+  let copy, animation, settings;
   let screenWidth = 0, start = 0, cycle = 0, target = 0, travelled = 0;
   let frame = null, lastTick = null, stopped = false;
   let sequence = null;
@@ -23,7 +24,7 @@ const SCREEN_SEQUENCE_SETTINGS = {
   function render() {
     if (!cycle) return;
     let x = start - travelled * screenWidth;
-    if (animation === 'static') {
+    if (animation === 'static' || motion.matches) {
       x = target;
       stopped = true;
     } else if (animation === 'scroll-stop') {
@@ -37,7 +38,7 @@ const SCREEN_SEQUENCE_SETTINGS = {
     }
   }
   function measure() {
-    if (!ready || !copy) return;
+    if (!copy) return;
     const screenRect = display.getBoundingClientRect();
     const messageRect = message.getBoundingClientRect();
     screenWidth = screenRect.width;
@@ -45,7 +46,7 @@ const SCREEN_SEQUENCE_SETTINGS = {
     track.style.fontSize = '1em';
     let textWidth = copy.getBoundingClientRect().width;
     // A stopped menu heading must fit the available content width.
-    if (animation !== 'scroll-loop' && textWidth > messageRect.width) {
+    if ((animation !== 'scroll-loop' || motion.matches) && textWidth > messageRect.width) {
       track.style.fontSize = `${messageRect.width / textWidth}em`;
       textWidth = copy.getBoundingClientRect().width;
     }
@@ -55,8 +56,8 @@ const SCREEN_SEQUENCE_SETTINGS = {
     start = screenRect.right - messageRect.left + screenWidth * 0.1;
     target = (messageRect.width - textWidth) / 2;
     track.style.gap = `${gap}px`;
-    const count = animation === 'scroll-loop' ? Math.max(2, Math.ceil(screenWidth / cycle) + 2) : 1;
-    while (track.children.length > 1) track.lastElementChild.remove();
+    const count = animation === 'scroll-loop' && !motion.matches ? Math.max(2, Math.ceil(screenWidth / cycle) + 2) : 1;
+    while (track.children.length > count) track.lastElementChild.remove();
     while (track.children.length < count) track.append(copy.cloneNode(true));
     render();
     message.classList.add('is-animating');
@@ -95,7 +96,8 @@ const SCREEN_SEQUENCE_SETTINGS = {
     measure();
   }
   function titleLoop(title, loopText, { holdSeconds = SCREEN_SEQUENCE_SETTINGS['title-loop'].holdSeconds, onLoopStart = null } = {}) {
-    show(title, 'scroll-stop');
+    show(title, motion.matches ? 'static' : 'scroll-stop');
+    if (motion.matches) return;
     sequence = { loopText, holdSeconds, elapsed: 0, onLoopStart };
     scheduleTick();
   }
@@ -108,7 +110,9 @@ const SCREEN_SEQUENCE_SETTINGS = {
     message.replaceChildren();
   }
   function scheduleTick() {
-    if (frame === null && cycle && (!stopped || sequence)) frame = requestAnimationFrame(tick);
+    if (frame === null && cycle && !document.hidden && !motion.matches && (!stopped || sequence)) {
+      frame = requestAnimationFrame(tick);
+    }
   }
   function tick(now) {
     frame = null;
@@ -131,10 +135,14 @@ const SCREEN_SEQUENCE_SETTINGS = {
     scheduleTick();
   }
   window.ScreenText = { show, titleLoop, clear, setVisible(visible) { message.style.opacity = visible ? '1' : '0'; } };
-  screenFontsReady.then(() => {
-    ready = true;
+  document.fonts.addEventListener('loadingdone', measure);
+  new ResizeObserver(measure).observe(display);
+  motion.addEventListener('change', () => {
+    if (!motion.matches && animation !== 'static') stopped = false;
     measure();
-    new ResizeObserver(measure).observe(display);
   });
-  document.addEventListener('visibilitychange', () => { lastTick = null; });
+  document.addEventListener('visibilitychange', () => {
+    lastTick = null;
+    scheduleTick();
+  });
 })();

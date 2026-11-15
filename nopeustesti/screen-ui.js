@@ -28,9 +28,9 @@ const SCREEN_UI_LAYOUT = {
   glowStrength: 0.8
 };
 
-// Load each selected face before the text animation measures it, including the score font.
+// The initial screen only uses the main and bottom faces.
 const screenFontsReady = Promise.allSettled(
-  [...new Set([SCREEN_UI_LAYOUT.mainFont, SCREEN_UI_LAYOUT.scoreFont, SCREEN_UI_LAYOUT.bottomFont])]
+  [...new Set([SCREEN_UI_LAYOUT.mainFont, SCREEN_UI_LAYOUT.bottomFont])]
     .map(font => document.fonts.load(`16px '${font}'`))
 );
 

@@ -10,6 +10,8 @@ const screen = document.querySelector('.score-screen');
 const pad = document.querySelector('.button-pad');
 let layoutFrame = 0;
 let settleTimers = [];
+let lastViewport = [];
+let lastStage = [];
 function update() {
   if (layoutFrame || document.hidden) return;
   layoutFrame = requestAnimationFrame(applyLayout);
@@ -19,12 +21,17 @@ function applyLayout() {
   if (document.hidden) return;
   // Choose the mode and dimensions in the same frame after rotation.
   const viewport = window.visualViewport;
-  root.style.setProperty('--viewport-width', `${viewport?.width || innerWidth}px`);
-  root.style.setProperty('--viewport-height', `${viewport?.height || innerHeight}px`);
-  root.style.setProperty('--viewport-left', `${viewport?.offsetLeft || 0}px`);
-  root.style.setProperty('--viewport-top', `${viewport?.offsetTop || 0}px`);
+  const viewportSize = [viewport?.width || innerWidth, viewport?.height || innerHeight,
+    viewport?.offsetLeft || 0, viewport?.offsetTop || 0];
+  ['width', 'height', 'left', 'top'].forEach((name, index) => {
+    if (viewportSize[index] !== lastViewport[index]) {
+      root.style.setProperty(`--viewport-${name}`, `${viewportSize[index]}px`);
+    }
+  });
+  lastViewport = viewportSize;
   const { width, height } = stage.getBoundingClientRect();
   if (width <= 0 || height <= 0) return;
+  if (width === lastStage[0] && height === lastStage[1]) return;
   const mode = width > height ? 'landscape' : 'portrait';
   const cfg = GAME_LAYOUT[mode];
   root.dataset.orientation = mode;
@@ -52,6 +59,7 @@ function applyLayout() {
   const buttonSize = desiredButton * scale;
   // Ignore transient invalid measurements instead of saving a collapsed layout.
   if (!Number.isFinite(buttonSize) || buttonSize <= 0 || !Number.isFinite(screenW) || screenW <= 0) return;
+  lastStage = [width, height];
   root.style.setProperty('--bolt-size', `${screenW * cfg.boltToScreen}px`);
   const scaledGap = gap * scale;
   screen.style.width = `${screenW}px`;

@@ -3,8 +3,8 @@ const GAME_AUDIO = {
   clackVolume: 5,
   beepVolume: 5,
   maxVolume: 5,
-  sounds: { press: 'button-press.wav', release: 'button-release.wav', gameOver: 'gameover.wav' },
-  tones: { red: 'd#3_1.wav', yellow: 'g#3_1.wav', blue: 'd#4_1.wav', green: 'g#4_1.wav' }
+  sounds: { press: 'button-press.mp3', release: 'button-release.mp3', gameOver: 'gameover.mp3' },
+  tones: { red: 'd#3_1.mp3', yellow: 'g#3_1.mp3', blue: 'd#4_1.mp3', green: 'g#4_1.mp3' }
 };
 (() => {
   const volumeKey = 'nopeustesti.audio';
@@ -26,19 +26,42 @@ const GAME_AUDIO = {
   const sources = new Set();
   const bytes = new Map();
   const buffers = new Map();
-  // Fetch early; decode once audio has been unlocked by a user gesture.
-  for (const file of [...Object.values(GAME_AUDIO.sounds), ...Object.values(GAME_AUDIO.tones)]) {
-    bytes.set(file, fetch(`assets/${encodeURIComponent(file)}`).then(r => {
-      if (!r.ok) throw new Error(`Sound not found: ${file}`);
-      return r.arrayBuffer();
-    }).catch(error => { console.warn(error); return null; }));
+  function download(file) {
+    if (!bytes.has(file)) {
+      bytes.set(file, fetch(`assets/${encodeURIComponent(file)}`).then(r => {
+        if (!r.ok) throw new Error(`Sound not found: ${file}`);
+        return r.arrayBuffer();
+      }).catch(error => {
+        bytes.delete(file);
+        console.warn(error);
+        return null;
+      }));
+    }
+    return bytes.get(file);
+  }
+  const cueFiles = [...Object.values(GAME_AUDIO.tones), GAME_AUDIO.sounds.gameOver];
+  const ready = Promise.all([...Object.values(GAME_AUDIO.sounds), ...Object.values(GAME_AUDIO.tones)].map(download));
+  function decode(file, audioContext) {
+    if (!buffers.has(file)) {
+      buffers.set(file, download(file).then(async data => {
+        if (!data) throw new Error(`Sound unavailable: ${file}`);
+        return audioContext.decodeAudioData(data.slice(0));
+      }).catch(error => {
+        buffers.delete(file);
+        console.warn(error);
+        return null;
+      }));
+    }
+    return buffers.get(file);
   }
   function unlock() {
     if (document.hidden) return;
     if (context?.state === 'closed') context = null;
-    context ??= new (window.AudioContext || window.webkitAudioContext)();
+    const Audio = window.AudioContext || window.webkitAudioContext;
+    if (!Audio) return;
+    context ??= new Audio();
     // Safari also uses "interrupted" after a lock, call, or app switch.
-    if (context.state !== 'running') context.resume().catch(console.warn);
+    return context.state === 'running' ? Promise.resolve() : context.resume().catch(console.warn);
   }
   function stopAll() {
     generation++;
@@ -67,7 +90,9 @@ const GAME_AUDIO = {
     needsFreshContext = Boolean(context);
   }
   document.addEventListener('pointerdown', restoreOnGesture, { capture: true });
+  document.addEventListener('pointerup', restoreOnGesture, { capture: true });
   document.addEventListener('keydown', restoreOnGesture, { capture: true });
+  document.addEventListener('click', restoreOnGesture, { capture: true });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) background();
     else if (context) unlock();
@@ -88,12 +113,8 @@ const GAME_AUDIO = {
       const audioContext = context;
       const playbackGeneration = generation;
       const volume = GAME_AUDIO[channel] / GAME_AUDIO.maxVolume;
-      if (!volume) return;
-      if (!buffers.has(file)) buffers.set(file, bytes.get(file).then(data => data ? audioContext.decodeAudioData(data.slice(0)) : null).catch(error => {
-        buffers.delete(file);
-        throw error;
-      }));
-      const buffer = await buffers.get(file);
+      if (!volume || !audioContext) return;
+      const buffer = await decode(file, audioContext);
       if (!buffer || document.hidden || playbackGeneration !== generation || audioContext !== context || audioContext.state !== 'running' || (isTone && request !== toneRequest)) return;
       const source = audioContext.createBufferSource();
       const gain = audioContext.createGain();
@@ -112,6 +133,25 @@ const GAME_AUDIO = {
   }
   window.GameAudio = {
     unlock,
+    ready,
+    async prepareRun() {
+      if (!GAME_AUDIO.beepVolume) return true;
+      let timer;
+      try {
+        const resume = unlock();
+        const audioContext = context;
+        if (!audioContext) return false;
+        const timeout = new Promise(resolve => { timer = setTimeout(() => resolve(false), 6000); });
+        const prepare = Promise.all([resume, ...cueFiles.map(file => decode(file, audioContext))])
+          .then(([, ...decoded]) => context === audioContext && audioContext.state === 'running' && decoded.every(Boolean));
+        return await Promise.race([prepare, timeout]);
+      } catch (error) {
+        console.warn('Cue audio could not be prepared:', error);
+        return false;
+      } finally {
+        clearTimeout(timer);
+      }
+    },
     press: () => play(GAME_AUDIO.sounds.press, 'clackVolume'),
     release: () => play(GAME_AUDIO.sounds.release, 'clackVolume'),
     tone: color => play(GAME_AUDIO.tones[color], 'beepVolume'),

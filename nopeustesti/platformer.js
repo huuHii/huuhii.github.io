@@ -9,21 +9,33 @@ const Platformer = (() => {
   const idleBeatMs = 60000 / GameRules.bpmAt(0);
   const centerDepth = layout.lanes.center;
   const runnerSprites = new Map();
+  const seed = Math.floor(Math.random() * 2 ** 32);
   function runnerSprite(runner) {
-    if (!runnerSprites.has(runner.sprite)) runnerSprites.set(runner.sprite, PlatformerSprites.load(runner.sprite));
+    if (!runnerSprites.has(runner.sprite)) runnerSprites.set(runner.sprite, PlatformerSprites.load(runner.sprite, invalidate));
     return runnerSprites.get(runner.sprite);
   }
   const obstacleTypes = Object.fromEntries(Object.entries(obstacleSettings.types).map(([name, type]) =>
-    [name, { ...type, sprite: PlatformerSprites.load(type.file) }]
+    [name, { ...type, sprite: PlatformerSprites.load(type.file, invalidate) }]
   ));
-  const makeTrack = config => ({ config, sprites: config.files.map(file => PlatformerSprites.load(file)),
-    items: [], next: null });
-  const bumps = makeTrack(settings.bumps);
-  const clouds = makeTrack(BACKGROUND_ANIMATIONS.clouds);
-  const particles = { items: [], next: null };
+  const makeTrack = (config, gap, size, salt, makeItem) => ({
+    config, salt, makeItem, items: [],
+    spacing: (gap[0] + gap[1]) / 2 + size,
+    sprites: config.files?.map(file => PlatformerSprites.load(file, invalidate)) ?? []
+  });
+  const cloudsConfig = BACKGROUND_ANIMATIONS.clouds;
+  const bumps = makeTrack(settings.bumps, settings.bumps.gap, .12, 1, () => ({}));
+  const clouds = makeTrack(cloudsConfig, cloudsConfig.spawnGap, .18, 2, random => ({
+    size: randomBetween(cloudsConfig.size, random),
+    fromBottom: randomBetween(cloudsConfig.fromBottom, random)
+  }));
+  const particles = makeTrack(GROUND_PARTICLES, GROUND_PARTICLES.spawnGap, .025, 3, random =>
+    random() < GROUND_PARTICLES.spawnChance ? {
+      fraction: randomBetween(GROUND_PARTICLES.fromBottom, random),
+      size: randomBetween(GROUND_PARTICLES.length, random)
+    } : null);
   const obstacles = [];
   const actions = [];
-  let width = 0, height = 0, frame = 0;
+  let width = 0, height = 0, frame = null;
   let run = null;
   let action = null;
   let updatedAt = performance.now();
@@ -36,23 +48,17 @@ const Platformer = (() => {
 
   function resize() {
     const bounds = canvas.getBoundingClientRect();
-    if (height !== bounds.height) {
-      // Bump and particle widths in world units depend on the display height.
-      bumps.items.length = 0;
-      bumps.next = null;
-      bumps.left = undefined;
-      particles.items.length = 0;
-      particles.next = null;
-    }
     ({ width, height } = bounds);
-    if (!width || !height) return;
-    const ratio = window.devicePixelRatio || 1;
+    if (!width || !height || !context) return;
+    const ratio = Math.min(settings.maxPixelRatio, window.devicePixelRatio || 1);
     const pixelWidth = Math.max(1, Math.round(width * ratio));
     const pixelHeight = Math.max(1, Math.round(height * ratio));
     if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
     if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
     context.setTransform(pixelWidth / width, 0, 0, pixelHeight / height, 0, 0);
     context.imageSmoothingEnabled = false;
+    PlatformerSprites.setPixelRatio(ratio);
+    invalidate();
   }
   new ResizeObserver(resize).observe(canvas);
   window.addEventListener('resize', resize);
@@ -134,36 +140,33 @@ const Platformer = (() => {
   function spriteWidth(sprite, size) {
     return size * sprite.image.naturalWidth / sprite.image.naturalHeight;
   }
-  function randomBetween([min, max]) {
-    return min + (max - min) * Math.random();
+  function randomBetween([min, max], random) {
+    return min + (max - min) * random();
   }
-  function updateTrack(track, distance, gap, makeItem, measure, extraLeft = 0, extraRight = 0) {
-    const { config, items, sprites } = track;
-    if (!sprites.length || sprites.some(sprite => !sprite.image.naturalWidth)) return;
-    const left = distance - width / (2 * height) - extraLeft;
-    const right = distance + width / (2 * height) + extraRight;
-    while (items.length && items[0].x + measure(items[0]) / height < left) items.shift();
-    if (track.next === null || track.next < left - width / height) track.next = left + randomBetween(gap);
-    // Resizing may reveal world to the left of the first generated sprite.
-    // Seed that gap once without changing any of the scenery that was already visible.
-    if (track.left > left) {
-      let edge = Math.min(track.left, items[0]?.x ?? track.left);
-      while (edge > left) {
-        const sprite = sprites[Math.floor(Math.random() * sprites.length)];
-        const item = { ...makeItem(), sprite, mirror: Math.random() < config.mirrorChance };
-        edge -= measure(item) / height + randomBetween(gap);
-        items.unshift({ ...item, x: edge });
-      }
-    }
-    track.left = left;
-    while (track.next < right + 0.5) {
-      const sprite = sprites[Math.floor(Math.random() * sprites.length)];
-      const item = { ...makeItem(), sprite, x: track.next, mirror: Math.random() < config.mirrorChance };
-      items.push(item);
-      track.next += measure(item) / height + randomBetween(gap);
+  function updateTrack(track, left, right) {
+    const { config, items, sprites, spacing, salt } = track;
+    const first = Math.floor(left / spacing) - 1;
+    const last = Math.ceil(right / spacing) + 1;
+    if (first === track.first && last === track.last) return;
+    track.first = first;
+    track.last = last;
+    items.length = 0;
+    // A world slot has the same contents each time it becomes visible.
+    for (let i = first; i <= last; i++) {
+      let state = seed ^ Math.imul(i, 0x9e3779b1) ^ Math.imul(salt, 0x85ebca6b);
+      const random = () => {
+        state = (Math.imul(state, 1664525) + 1013904223) | 0;
+        const mixed = Math.imul(state ^ (state >>> 16), 0x21f0aaad);
+        return ((mixed ^ (mixed >>> 15)) >>> 0) / 2 ** 32;
+      };
+      const x = (i + random() * .7) * spacing;
+      const item = track.makeItem(random);
+      if (item) items.push({ ...item, x, sprite: sprites[Math.floor(random() * sprites.length)],
+        mirror: random() < config.mirrorChance });
     }
   }
   function drawScenery(item, x, y, w, h) {
+    if (x + w < -16 || x > width + 16) return;
     if (item.mirror) {
       context.save();
       context.translate(x + w, y);
@@ -179,12 +182,12 @@ const Platformer = (() => {
     const parallax = MENU_TRANSITIONS.skyParallax * width / height;
     const travel = cloudDistance + camera.x * parallax;
     const cloudWidth = item => spriteWidth(item.sprite, item.size * height);
-    const { characters, practice } = MENU_TRANSITIONS.positions;
-    updateTrack(clouds, cloudDistance, config.spawnGap, () => ({ size: randomBetween(config.size),
-      fromBottom: randomBetween(config.fromBottom) }), cloudWidth, -characters.x * parallax, practice.x * parallax);
+    const halfSpan = width / (2 * height);
+    updateTrack(clouds, travel - halfSpan - .5, travel + halfSpan);
     context.globalAlpha = config.opacity;
     for (let band = Math.floor(camera.y); band <= Math.min(0, Math.ceil(camera.y)); band++) {
       for (const cloud of clouds.items) {
+        if (!cloud.sprite?.image.naturalWidth) continue;
         const size = cloud.size * height;
         // Stagger the cloud decks so each level of sky has a different silhouette.
         const fromBottom = band % 2 ? config.fromBottom[1] + config.fromBottom[0] - cloud.fromBottom : cloud.fromBottom;
@@ -194,10 +197,8 @@ const Platformer = (() => {
     }
     context.globalAlpha = 1;
   }
-  const groundLookBehind = () => -MENU_TRANSITIONS.positions.characters.x * width / height;
-  const groundLookAhead = () => MENU_TRANSITIONS.positions.practice.x * width / height;
   function drawGroundParticles(distance) {
-    const { spawnGap, spawnChance, length, thickness, fromBottom, opacity } = GROUND_PARTICLES;
+    const { spawnChance, length, thickness, opacity } = GROUND_PARTICLES;
     if (opacity <= 0 || spawnChance <= 0) return;
 
     const horizon = layout['ground-line'];
@@ -207,25 +208,13 @@ const Platformer = (() => {
     const rows = Math.min(canvas.height - top, Math.max(1, Math.round(thickness / py)));
     if (rows <= 0) return;
 
-    // Use the widest view of the ground for spawning and retain a margin for camera nudges.
     const worldPixel = 1 / (height * Math.min(scaleAt(0), scaleAt(horizon)));
     const halfSpan = width / 2 * worldPixel;
-    const margin = width / height * settings.earlyPressNudge.maxRight / scaleAt(centerDepth);
-    const left = groundDistance - groundLookBehind() - halfSpan - margin - (length[1] + px) * worldPixel;
-    const right = groundDistance + groundLookAhead() + halfSpan + margin;
-    const { items } = particles;
-    while (items.length && items[0].x < left) items.shift();
-    if (particles.next === null || particles.next < left) particles.next = left;
-    while (particles.next <= right) {
-      const fraction = randomBetween(fromBottom);
-      const size = randomBetween(length);
-      if (Math.random() < spawnChance) items.push({ x: particles.next, fraction, size });
-      particles.next += Math.max(px, size) / (height * scaleAt(fraction * horizon)) + randomBetween(spawnGap);
-    }
+    updateTrack(particles, distance - halfSpan - (length[1] + px) * worldPixel, distance + halfSpan);
 
     const path = new Path2D();
     const bottom = canvas.height - rows;
-    for (const { x, fraction, size } of items) {
+    for (const { x, fraction, size } of particles.items) {
       const column = Math.round(projectX(x - distance, fraction * horizon) / px);
       if (column * px < -length[1] || column * px > width) continue;
       const row = Math.round(bottom - fraction * (bottom - top));
@@ -233,7 +222,7 @@ const Platformer = (() => {
     }
     context.fillStyle = GAME_THEME.ledColor;
     context.globalAlpha = opacity;
-    PlatformerSprites.drawLit(context, () => context.fill(path));
+    PlatformerSprites.drawLit(context, () => context.fill(path), settings.outlineGlow.blur.slice(0, 1));
     context.globalAlpha = 1;
   }
   function drawGround(distance, beatDistance) {
@@ -261,12 +250,15 @@ const Platformer = (() => {
     const pixel = Math.max(1, Math.round(settings.groundLineWidth / py)) * py;
     const y = Math.round((horizonY - pixel / 2) / py) * py;
     const bumpWidth = item => Math.round(item.sprite.image.naturalWidth * pixel / px) * px;
-    updateTrack(bumps, groundDistance, settings.bumps.gap, () => ({}), bumpWidth, groundLookBehind(), groundLookAhead());
+    const halfSpan = width / (2 * height);
+    updateTrack(bumps, distance - halfSpan - .5, distance + halfSpan);
     context.fillStyle = GAME_THEME.ledColor;
     context.globalAlpha = settings.groundLineOpacity;
+    PlatformerSprites.drawGroundGlow(context, width, y, pixel);
     const groundLine = new Path2D();
     let cursor = 0;
     for (const bump of bumps.items) {
+      if (!bump.sprite?.image.naturalWidth) continue;
       const x = Math.round(projectX(bump.x - distance, horizon) / px) * px;
       const w = bumpWidth(bump);
       if (x >= width) break;
@@ -277,7 +269,7 @@ const Platformer = (() => {
       cursor = Math.max(cursor, x + w);
     }
     if (cursor < width) groundLine.rect(cursor, y, width - cursor, pixel);
-    PlatformerSprites.drawLit(context, () => context.fill(groundLine));
+    context.fill(groundLine);
     context.globalAlpha = 1;
   }
   function obstacleSize({ type, depth }) {
@@ -399,7 +391,11 @@ const Platformer = (() => {
     }
     return poseAt(run.position, runnerDistance());
   }
+  function invalidate() {
+    if (context && frame === null && !canvas.hidden && !document.hidden) frame = requestAnimationFrame(render);
+  }
   function render(now) {
+    frame = null;
     if (width && height) {
       advanceWorld(now);
       context.clearRect(0, 0, width, height);
@@ -435,24 +431,39 @@ const Platformer = (() => {
       }
       context.restore();
     }
-    frame = requestAnimationFrame(render);
+    if (run || MenuCamera.moving || (!MenuCamera.reducedMotion && MenuCamera.position.y < 1)) invalidate();
   }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      cancelAnimationFrame(frame);
+      frame = null;
+    } else invalidate();
+  });
+  matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', invalidate);
   return {
+    invalidate,
+    get ready() {
+      const sprites = [...runnerSprites.values(), ...bumps.sprites, ...clouds.sprites];
+      return Promise.all(sprites.map(sprite => sprite.ready));
+    },
     enterRunner(runner, view) {
       menuPlayer = runnerSprite(runner);
       runnerView = view;
       const config = MENU_TRANSITIONS.homeEntrance;
       entranceAt = config.enabled && config.durationMs > 0 && !MenuCamera.reducedMotion ? performance.now() + config.delayMs : undefined;
+      invalidate();
     },
-    hideRunner() { menuPlayer = undefined; },
+    hideRunner() { menuPlayer = undefined; invalidate(); },
     setPracticeTempo(bpm) {
       advanceWorld(performance.now());
       practiceTempo = bpm;
+      invalidate();
     },
     previewRunner(runner, { previous, step } = {}) {
       previewPlayer = runnerSprite(runner);
       previewSwap = previous && CHARACTERS_MENU.swapMs > 0 && !MenuCamera.reducedMotion ?
         { player: runnerSprite(previous), step, at: performance.now() } : undefined;
+      invalidate();
     },
     setVisible(visible) {
       if (!context || visible === !canvas.hidden) return;
@@ -460,9 +471,9 @@ const Platformer = (() => {
       if (visible) {
         if (!run) updatedAt = performance.now();
         resize();
-        frame = requestAnimationFrame(render);
       } else {
         cancelAnimationFrame(frame);
+        frame = null;
       }
     },
     startRun(startedAt, nextBeat) {
@@ -472,6 +483,7 @@ const Platformer = (() => {
       beatOrigin = groundDistance;
       cameraNudge = 0;
       run = { beats: 0, startedAt, beatMs: nextBeat - startedAt, cue: 0, position: 0, confirmedCue: 0, earlyPress: 0 };
+      invalidate();
     },
     planBeat(beat, color) {
       if (!run) return;
@@ -496,6 +508,7 @@ const Platformer = (() => {
       action = null;
       actions.length = 0;
       obstacles.length = 0;
+      invalidate();
     },
     act(color, cueBeat) {
       if (!run) return;

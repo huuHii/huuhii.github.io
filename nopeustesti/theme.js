@@ -11,6 +11,7 @@ const GAME_THEME = {
 };
 const themeRoot = document.documentElement;
 themeRoot.style.setProperty('--game-top', GAME_THEME.backgroundTop);
+document.querySelector('meta[name="theme-color"]').content = GAME_THEME.backgroundTop;
 themeRoot.style.setProperty('--game-bottom', GAME_THEME.backgroundBottom);
 themeRoot.style.setProperty('--screen-tint', GAME_THEME.screenTint);
 themeRoot.style.setProperty('--screen-tint-strength', GAME_THEME.screenTintStrength);

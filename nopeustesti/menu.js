@@ -14,6 +14,7 @@
   let settingsTop = 0;
   let practiceIndex = Math.max(0, practiceSpeeds.indexOf(PRACTICE_MENU.initialSpeed));
   let activeHold;
+  let startingUp = true;
   const menuHolds = {
     home: {
       right: {
@@ -81,7 +82,11 @@
     target.replaceChildren(header, content, nav);
   }
   function selectPanel(id) {
-    for (const [name, panel] of panels) panel.setAttribute('aria-hidden', String(id !== name));
+    for (const [name, panel] of panels) {
+      panel.hidden = id !== name;
+      panel.setAttribute('aria-hidden', String(panel.hidden));
+    }
+    hud.hidden = id !== 'home';
     hud.setAttribute('aria-hidden', String(id !== 'home'));
   }
   const number = new Intl.NumberFormat();
@@ -210,7 +215,7 @@
       highscores: drawHighscores, statistics: drawStatistics, practice: drawPractice })[target]();
   }
   function blocksInput() {
-    return MenuCamera.moving || performance.now() < lockedUntil;
+    return startingUp || MenuCamera.moving || performance.now() < lockedUntil;
   }
   function enterHome() {
     Platformer.enterRunner(runners[runnerIndex], 'home');
@@ -218,16 +223,18 @@
   }
   function go(target) {
     cancelHold();
-    if (target === 'characters') ScreenText.clear();
     if (target === 'practice') {
-      panels.get('practice').hidden = false;
       Platformer.setPracticeTempo(GameRules.bpmAt(practiceSpeeds[practiceIndex]));
     } else if (view === 'practice') {
       Platformer.setPracticeTempo(0);
     }
-    if (target !== 'home') draw(target);
+    if (target !== 'home') {
+      panels.get(target).hidden = false;
+      draw(target);
+    }
     MenuCamera.move(target, () => {
       view = target;
+      if (view !== 'home') ScreenText.clear();
       lockedUntil = performance.now() + MENU_TRANSITIONS.settleMs;
       selectPanel(view);
       if (view === 'home') enterHome();
@@ -355,10 +362,28 @@
   window.GameMenu = {
     get current() { return view; },
     get blocksInput() { return blocksInput(); },
+    startupComplete() {
+      startingUp = false;
+      Platformer.setVisible(true);
+      selectPanel('home');
+      enterHome();
+      GameLights.standby();
+    },
+    restoreAfterReady() {
+      if (view === 'home') enterHome();
+      else {
+        hud.hidden = true;
+        panels.get('practice').hidden = false;
+        Platformer.setPracticeTempo(GameRules.bpmAt(practiceSpeeds[practiceIndex]));
+        drawPractice();
+      }
+      selectPanel(view);
+      GameLights.standby();
+    },
     prepareForGame(practice) {
       const target = practice ? 'practice' : 'home';
       MenuCamera.place(hud, target);
-      panels.get('practice').hidden = practice;
+      panels.get('practice').hidden = true;
       hud.hidden = false;
       hud.removeAttribute('aria-hidden');
       if (practice) Platformer.setPracticeTempo(GameRules.bpmAt(practiceSpeeds[practiceIndex]));
@@ -366,8 +391,4 @@
   };
   GameButtons.setInputGuard(blocksInput);
   Platformer.previewRunner(runners[runnerIndex]);
-  Platformer.setVisible(true);
-  selectPanel('home');
-  enterHome();
-  GameLights.standby();
 })();

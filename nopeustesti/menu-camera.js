@@ -15,6 +15,7 @@ const MenuCamera = (() => {
   function apply(next) {
     position = next;
     world.style.transform = `translate(${-next.x * 100}%, ${-next.y * 100}%)`;
+    Platformer.invalidate();
   }
 
   function move(view, arrived) {

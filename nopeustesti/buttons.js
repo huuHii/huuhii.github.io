@@ -61,12 +61,12 @@
   }
   function mountLegacy(button, color) {
     const base = `assets/${color}`;
-    const image = sprite(`${base}-default.png`);
-    for (const name of ['pressed', 'lit', 'lit-pressed']) sprite(`${base}-${name}.png`);
+    const image = sprite(`${base}-default.webp`);
+    for (const name of ['pressed', 'lit', 'lit-pressed']) sprite(`${base}-${name}.webp`);
     button.append(image);
     return (lit, pressed) => {
       const name = lit ? (pressed ? 'lit-pressed' : 'lit') : (pressed ? 'pressed' : 'default');
-      image.src = `${base}-${name}.png`;
+      image.src = `${base}-${name}.webp`;
     };
   }
   function render(state) {
@@ -150,6 +150,12 @@
     button.addEventListener('blur', () => {
       release(state, 'key: ', true);
       release(state, 'key:Enter', true);
+    });
+    button.addEventListener('click', event => {
+      // Pointer and keyboard events already provide press/release timing.
+      if (event.detail !== 0) return;
+      press(state, 'activation');
+      release(state, 'activation');
     });
     button.addEventListener('contextmenu', event => event.preventDefault());
   }

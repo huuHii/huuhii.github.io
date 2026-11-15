@@ -4,6 +4,9 @@ Put browser-ready assets for Nopeustesti in this folder, such as images, audio, 
 
 Reference them from the game page with paths like `assets/example.png`.
 
+The game serves 128 kbps MP3 audio, WOFF fonts and smaller WebP versions of the
+bolt and legacy buttons. The WAV, TTF and PNG sources are kept for future edits.
+
 ## UI icon preloading
 
 Small icons used by the interface are preloaded in `../index.html` because

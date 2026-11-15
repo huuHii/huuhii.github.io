@@ -7,7 +7,8 @@
   let startingScore = 0, beats = 0, queue = [], lastColor = null;
   const plannedColors = [];
   let beatTimer = null, session = 0, nextBeat = 0;
-  let runStartedAt = 0, taps = 0;
+  let runStartedAt = 0, taps = 0, cueAudio = false;
+  let playingFooter;
   function element(className, value) {
     const node = document.createElement('span');
     node.className = className;
@@ -25,6 +26,13 @@
     return group;
   }
   function renderFooter(result = false) {
+    const view = result ? (practice ? 'practice-result' : 'game-result') : (practice ? 'practice-game' : 'game');
+    const best = Math.max(GameRecords.highscore, score);
+    if (!result && playingFooter && footer.dataset.view === view) {
+      updateMetric(playingFooter.tempo, 'BPM', Math.round(bpm));
+      if (!practice) updateMetric(playingFooter.best, 'Highscore', best);
+      return;
+    }
     const nodes = [];
     if (result) {
       const menu = element('screen-bottom-item screen-bottom-left');
@@ -32,12 +40,12 @@
       nodes.push(menu);
     }
     const tempo = metric('led-metronome', Math.round(bpm));
-    tempo.setAttribute('aria-label', `BPM ${Math.round(bpm)}`);
+    updateMetric(tempo, 'BPM', Math.round(bpm));
     nodes.push(tempo);
+    let highscore;
     if (!practice) {
-      const best = Math.max(GameRecords.highscore, score);
-      const highscore = metric('led-star', best);
-      highscore.setAttribute('aria-label', `Highscore ${best}`);
+      highscore = metric('led-star', best);
+      updateMetric(highscore, 'Highscore', best);
       nodes.push(highscore);
     }
     if (result) {
@@ -45,8 +53,15 @@
       replay.append(element('', practice ? 'RETRY' : 'PLAY'), icon('led-arrow'));
       nodes.push(replay);
     }
-    footer.dataset.view = result ? (practice ? 'practice-result' : 'game-result') : (practice ? 'practice-game' : 'game');
+    playingFooter = result ? null : { tempo, best: highscore };
+    footer.dataset.view = view;
     footer.replaceChildren(...nodes);
+  }
+  function updateMetric(node, label, value) {
+    const text = String(value);
+    if (node.lastElementChild.textContent !== text) node.lastElementChild.textContent = text;
+    const name = `${label} ${text}`;
+    if (node.getAttribute('aria-label') !== name) node.setAttribute('aria-label', name);
   }
   function leave() {
     session++;
@@ -68,7 +83,7 @@
     GameAudio.stopTone();
     if (!practice) GameRecords.saveRun({ score, taps, timeMs: performance.now() - runStartedAt });
     ScreenText.show(String(score), 'static', { variant: 'score' });
-    GameAudio.gameOver();
+    if (cueAudio) GameAudio.gameOver();
     renderFooter(true);
     const token = session;
     GameLights.gameOver(() => {
@@ -100,7 +115,7 @@
     GameLights.all(false);
     GameButtons.setLit(color, true);
     queue.push(color);
-    GameAudio.tone(color);
+    if (cueAudio) GameAudio.tone(color);
     beats++;
     renderFooter();
     const scheduledBeat = nextBeat;
@@ -131,9 +146,9 @@
     GameButtons.setMenuFeedback(false);
     renderFooter();
     const token = session;
-    let textDone = false, lightsDone = false;
+    let textDone = false, lightsDone = false, audioDone = false;
     function begin() {
-      if (session !== token || phase !== 'ready' || !textDone || !lightsDone) return;
+      if (session !== token || phase !== 'ready' || !textDone || !lightsDone || !audioDone) return;
       phase = 'playing';
       ScreenText.show(String(score), 'static', { variant: 'score' });
       const startedAt = performance.now();
@@ -145,6 +160,17 @@
     }
     ScreenText.show('READY', 'scroll-stop', { onComplete() { textDone = true; begin(); } });
     GameLights.ready(() => { lightsDone = true; begin(); });
+    GameAudio.prepareRun().then(available => {
+      if (session !== token || phase !== 'ready') return;
+      cueAudio = available;
+      if (available) {
+        audioDone = true;
+        begin();
+      } else {
+        ScreenText.show('VISUAL ONLY', 'static');
+        beatTimer = setTimeout(() => { audioDone = textDone = true; begin(); }, 900);
+      }
+    });
   }
   document.addEventListener('game-start-request', () => start(false));
   document.addEventListener('practice-start-request', event => start(true, event.detail.startingSpeed));
@@ -160,7 +186,12 @@
     renderFooter();
   });
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden && phase === 'playing') finish();
+    if (!document.hidden) return;
+    if (phase === 'playing') finish();
+    if (phase === 'ready') {
+      leave();
+      GameMenu.restoreAfterReady();
+    }
   });
   window.GameSession = {
     get phase() { return phase; },

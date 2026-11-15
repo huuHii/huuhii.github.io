@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#000000">
+  <meta name="theme-color" content="#D15B50">
   <title>Nopeustesti</title>
   <!-- Preload the small icon masks so first-use icons do not flash while decoding. -->
   <link rel="preload" href="assets/ui/pixel-ui-arrow-left.png" as="image" type="image/png">
@@ -13,11 +13,16 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="corner-bolts" aria-hidden="true">
-    <img src="assets/flat-top-bolt.png" alt=""><img src="assets/flat-top-bolt.png" alt="">
-    <img src="assets/flat-top-bolt.png" alt=""><img src="assets/flat-top-bolt.png" alt="">
+  <div class="startup-splash" role="status">
+    <span class="startup-logo" aria-hidden="true">huuHii</span>
+    <span class="startup-spinner" aria-hidden="true"></span>
+    <span>Loading Nopeustesti</span>
   </div>
-  <main class="game-stage" aria-label="Nopeustesti reaction game">
+  <div class="corner-bolts" aria-hidden="true">
+    <img src="assets/flat-top-bolt.webp" alt=""><img src="assets/flat-top-bolt.webp" alt="">
+    <img src="assets/flat-top-bolt.webp" alt=""><img src="assets/flat-top-bolt.webp" alt="">
+  </div>
+  <main class="game-stage" aria-label="Nopeustesti reaction game" inert>
     <section class="score-screen" aria-label="Game display">
       <img class="screen-art" src="assets/led-screen-new.png" alt="">
       <div class="crt-scene">
@@ -72,5 +77,20 @@
   <script src="game-animations.js"></script>
   <script src="menu.js"></script>
   <script src="game.js"></script>
+  <script src="startup.js"></script>
+  <script type="module">
+    const bolt = document.querySelector('.corner-bolts img:nth-child(2)');
+    let clicks = 0;
+    let lastClick = -Infinity;
+    bolt.addEventListener('click', async () => {
+      const now = performance.now();
+      clicks = now - lastClick <= 450 ? clicks + 1 : 1;
+      lastClick = now;
+      if (clicks !== 3) return;
+      clicks = 0;
+      const { showPerfOverlay } = await import('./perf-overlay.js');
+      showPerfOverlay();
+    });
+  </script>
 </body>
 </html>

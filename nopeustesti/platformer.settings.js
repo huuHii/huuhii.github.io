@@ -1,4 +1,5 @@
 const PLATFORMER_SETTINGS = {
+  maxPixelRatio: 2,
   // Runner progress through the world. Catch-up speed is relative to the current tempo.
   playhead: { smoothingSeconds: 0.033, maxCatchUpSpeed: 1.8 },
   earlyPressNudge: {

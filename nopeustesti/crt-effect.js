@@ -86,9 +86,8 @@ const CrtEffect = (() => {
     set('curvature', 'url(#crt-curvature)');
   }
 
-  function updateRoll() {
+  function updateRoll(height) {
     if (glass.hidden || roll.hidden) return;
-    const height = glass.getBoundingClientRect().height;
     if (!height) return;
     const band = height * clamp(settings.rollHeight, 0, 1);
     const down = settings.rollSpeed > 0;
@@ -101,7 +100,7 @@ const CrtEffect = (() => {
   }
 
   function updateGeometry() {
-    updateRoll();
+    updateRoll(glass.getBoundingClientRect().height);
     updateCurvature(display.getBoundingClientRect());
   }
 
@@ -134,7 +133,8 @@ const CrtEffect = (() => {
     updateGeometry();
   }
 
-  new ResizeObserver(updateGeometry).observe(display);
+  new ResizeObserver(([entry]) => updateCurvature(entry.contentRect)).observe(display);
+  new ResizeObserver(([entry]) => updateRoll(entry.contentRect.height)).observe(glass);
   configure();
   return { configure };
 })();

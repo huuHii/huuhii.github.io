@@ -1,5 +1,8 @@
 const PlatformerSprites = (() => {
   const glow = PLATFORMER_SETTINGS.outlineGlow;
+  const maxCachedSizes = 12;
+  let pixelRatio = 1;
+  let groundGlow;
 
   function makeLayers(image) {
     const { naturalWidth: width, naturalHeight: height } = image;
@@ -26,19 +29,24 @@ const PlatformerSprites = (() => {
     return { fill, highlights };
   }
 
-  function load(file) {
+  function load(file, onReady) {
     const image = new Image();
-    const sprite = { image, layers: null };
-    image.addEventListener('load', () => {
-      try { sprite.layers = makeLayers(image); } catch {
-        // Pixel access can be restricted when an asset is served from a different origin.
-      }
-    }, { once: true });
-    image.src = `assets/proto-assets/${file}`;
+    const sprite = { image, layers: null, glow: new Map() };
+    sprite.ready = new Promise(resolve => {
+      image.addEventListener('error', resolve, { once: true });
+      image.addEventListener('load', () => {
+        try { sprite.layers = makeLayers(image); } catch {
+          // Fall back to the original image if pixel access is restricted.
+        }
+        onReady();
+        resolve();
+      }, { once: true });
+      image.src = `assets/proto-assets/${file}`;
+    });
     return sprite;
   }
 
-  function drawLit(ctx, paint) {
+  function drawLit(ctx, paint, radii = glow.blur) {
     if (glow.opacity > 0 && glow.blur.length) {
       ctx.save();
       const { a, b, c, d, e, f } = ctx.getTransform();
@@ -48,13 +56,56 @@ const PlatformerSprites = (() => {
       ctx.shadowOffsetX = offset;
       ctx.shadowColor = GAME_THEME.ledGlowColor;
       ctx.globalAlpha *= glow.opacity;
-      for (const blur of glow.blur) {
-        ctx.shadowBlur = blur * (window.devicePixelRatio || 1);
+      for (const blur of radii) {
+        ctx.shadowBlur = blur * pixelRatio;
         paint();
       }
       ctx.restore();
     }
     paint();
+  }
+
+  function drawGroundGlow(ctx, width, y, pixel) {
+    if (glow.opacity <= 0 || !glow.blur.length) return;
+    const rows = Math.max(1, Math.round(pixel * pixelRatio));
+    const key = [pixelRatio, rows, glow.opacity, GAME_THEME.ledGlowColor, ...glow.blur].join('/');
+    if (groundGlow?.key !== key) {
+      const pad = Math.ceil(Math.max(...glow.blur) * pixelRatio * 2);
+      const texture = document.createElement('canvas');
+      texture.width = pad * 2 + 1;
+      texture.height = pad * 2 + rows;
+      const brush = texture.getContext('2d');
+      drawLit(brush, () => brush.fillRect(0, pad, texture.width, rows));
+      // The sharp line is painted separately so the bumps can interrupt it.
+      brush.clearRect(0, pad, texture.width, rows);
+      groundGlow = { key, texture, pad };
+    }
+    const { texture, pad } = groundGlow;
+    const padding = pad * pixel / rows;
+    ctx.drawImage(texture, pad, 0, 1, texture.height, 0, y - padding, width, pixel + padding * 2);
+  }
+
+  function cachedGlow(sprite, width, height) {
+    const w = Math.max(1, Math.round(width * pixelRatio));
+    const h = Math.max(1, Math.round(height * pixelRatio));
+    const key = [pixelRatio, w, h, glow.opacity, GAME_THEME.ledGlowColor, ...glow.blur].join('/');
+    let result = sprite.glow.get(key);
+    if (result) {
+      sprite.glow.delete(key);
+      sprite.glow.set(key, result);
+      return result;
+    }
+    const padding = Math.ceil(Math.max(...glow.blur) * pixelRatio * 2);
+    const texture = document.createElement('canvas');
+    texture.width = w + padding * 2;
+    texture.height = h + padding * 2;
+    const ctx = texture.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    drawLit(ctx, () => ctx.drawImage(sprite.layers.highlights, padding, padding, w, h), glow.blur);
+    result = { texture, u: padding / w, v: padding / h };
+    sprite.glow.set(key, result);
+    if (sprite.glow.size > maxCachedSizes) sprite.glow.delete(sprite.glow.keys().next().value);
+    return result;
   }
 
   function draw(ctx, sprite, x, y, width, height) {
@@ -65,8 +116,13 @@ const PlatformerSprites = (() => {
     }
     const { fill, highlights } = sprite.layers;
     ctx.drawImage(fill, x, y, width, height);
-    drawLit(ctx, () => ctx.drawImage(highlights, x, y, width, height));
+    if (glow.opacity > 0 && glow.blur.length) {
+      const { texture, u, v } = cachedGlow(sprite, width, height);
+      const padX = width * u;
+      const padY = height * v;
+      ctx.drawImage(texture, x - padX, y - padY, width + padX * 2, height + padY * 2);
+    } else ctx.drawImage(highlights, x, y, width, height);
   }
 
-  return { load, draw, drawLit };
+  return { load, draw, drawLit, drawGroundGlow, setPixelRatio(ratio) { pixelRatio = ratio; } };
 })();
