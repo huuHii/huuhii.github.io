@@ -28,7 +28,7 @@
     const nodes = [];
     if (result) {
       const menu = element('screen-bottom-item screen-bottom-left');
-      menu.append(icon('led-arrow led-arrow-left'), element('', practice ? 'RETURN' : 'MENU'));
+      menu.append(icon('led-arrow led-arrow-left'), element('', practice ? 'SURFACE' : 'MENU'));
       nodes.push(menu);
     }
     const tempo = metric('led-metronome', Math.round(bpm));
@@ -84,7 +84,7 @@
       const candidates = colors.filter(color => color !== lastColor);
       lastColor = candidates[Math.floor(Math.random() * candidates.length)];
       plannedColors.push(lastColor);
-      if (!practice) Platformer.planBeat(beats + plannedColors.length, lastColor);
+      Platformer.planBeat(beats + plannedColors.length, lastColor);
     }
   }
   function planObstacleCues() {
@@ -105,10 +105,8 @@
     renderFooter();
     const scheduledBeat = nextBeat;
     nextBeat += 60000 / GameRules.bpmAt(startingScore + beats);
-    if (!practice) {
-      Platformer.beat(scheduledBeat, nextBeat);
-      planObstacleCues();
-    }
+    Platformer.beat(scheduledBeat, nextBeat);
+    planObstacleCues();
     beatTimer = setTimeout(() => {
       // Avoid a burst of missed beats after a stalled/hidden browser.
       if (performance.now() - nextBeat > 60000 / bpm) finish();
@@ -141,10 +139,8 @@
       const startedAt = performance.now();
       runStartedAt = startedAt;
       nextBeat = startedAt + 60000 / bpm;
-      if (!practice) {
-        Platformer.startRun(startedAt, nextBeat);
-        planObstacleCues();
-      }
+      Platformer.startRun(startedAt, nextBeat);
+      planObstacleCues();
       beatTimer = setTimeout(beat, 60000 / bpm);
     }
     ScreenText.show('READY', 'scroll-stop', { onComplete() { textDone = true; begin(); } });
@@ -158,7 +154,7 @@
     if (!queue.length) return;
     if (event.detail.color !== queue[0]) { finish(); return; }
     queue.shift();
-    if (!practice) Platformer.act(event.detail.color, beats - queue.length);
+    Platformer.act(event.detail.color, beats - queue.length);
     score++;
     ScreenText.show(String(score), 'static', { variant: 'score' });
     renderFooter();

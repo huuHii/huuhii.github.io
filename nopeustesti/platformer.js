@@ -31,7 +31,8 @@ const Platformer = (() => {
   let cloudDistance = 0;
   let beatOrigin = 0;
   let cameraNudge = 0;
-  let homePlayer, homeEntrance, previewPlayer, previewSwap;
+  let menuPlayer, runnerView, entranceAt, previewPlayer, previewSwap;
+  let practiceTempo = 0;
 
   function resize() {
     const bounds = canvas.getBoundingClientRect();
@@ -94,8 +95,12 @@ const Platformer = (() => {
       targetNudge = nudge.maxRight * strength;
     } else if (!MenuCamera.reducedMotion) {
       const { x, y } = MenuCamera.position;
-      const proximity = y === 0 ? Math.max(0, Math.min(1, x / MENU_TRANSITIONS.positions.characters.x)) : 0;
-      groundDistance += Math.min(elapsed, 0.05) * CHARACTERS_MENU.groundSpeed * proximity;
+      if (practiceTempo) {
+        groundDistance += Math.min(elapsed, 0.05) * practiceTempo / 60 * layout.beatSpacing;
+      } else {
+        const proximity = y === 0 ? Math.max(0, Math.min(1, x / MENU_TRANSITIONS.positions.characters.x)) : 0;
+        groundDistance += Math.min(elapsed, 0.05) * CHARACTERS_MENU.groundSpeed * proximity;
+      }
     }
     if (!MenuCamera.reducedMotion || run) {
       // Clouds keep drifting even when the player and ground are at rest.
@@ -189,30 +194,8 @@ const Platformer = (() => {
     }
     context.globalAlpha = 1;
   }
-  function drawUnderground(cameraY) {
-    const horizon = projectY(layout['ground-line']);
-    const bottom = (1 + cameraY) * height;
-    if (bottom <= horizon) return;
-    const { fill, strataOpacity, stratumSpacing } = SETTINGS_MENU.underground;
-    context.fillStyle = fill;
-    context.fillRect(0, horizon, width, bottom - horizon);
-    if (bottom <= height || stratumSpacing <= 0) return;
-    context.fillStyle = GAME_THEME.ledColor;
-    context.globalAlpha = strataOpacity;
-    const path = new Path2D();
-    const step = Math.max(1, Math.round(height * 0.018));
-    for (let row = 0, y = 1.03 * height; y < bottom; row++, y += stratumSpacing * height) {
-      for (let x = (row % 3) * step * 3; x < width; x += step * 12) {
-        path.rect(x, y, step * 2, 1);
-        path.rect(x + step * 2, y + step, step * 4, 1);
-      }
-    }
-    context.fill(path);
-    context.globalAlpha = 1;
-  }
-  function groundLookBehind() {
-    return -MENU_TRANSITIONS.positions.characters.x * width / height;
-  }
+  const groundLookBehind = () => -MENU_TRANSITIONS.positions.characters.x * width / height;
+  const groundLookAhead = () => MENU_TRANSITIONS.positions.practice.x * width / height;
   function drawGroundParticles(distance) {
     const { spawnGap, spawnChance, length, thickness, fromBottom, opacity } = GROUND_PARTICLES;
     if (opacity <= 0 || spawnChance <= 0) return;
@@ -229,7 +212,7 @@ const Platformer = (() => {
     const halfSpan = width / 2 * worldPixel;
     const margin = width / height * settings.earlyPressNudge.maxRight / scaleAt(centerDepth);
     const left = groundDistance - groundLookBehind() - halfSpan - margin - (length[1] + px) * worldPixel;
-    const right = groundDistance + halfSpan + margin;
+    const right = groundDistance + groundLookAhead() + halfSpan + margin;
     const { items } = particles;
     while (items.length && items[0].x < left) items.shift();
     if (particles.next === null || particles.next < left) particles.next = left;
@@ -253,18 +236,18 @@ const Platformer = (() => {
     PlatformerSprites.drawLit(context, () => context.fill(path));
     context.globalAlpha = 1;
   }
-  function drawGround(distance) {
+  function drawGround(distance, beatDistance) {
     const horizon = layout['ground-line'];
     const horizonY = projectY(horizon);
     if (settings.showBeatLines) {
       const halfSpan = width / (2 * height);
-      const firstBeat = Math.ceil((distance - halfSpan - beatLineX(0)) / layout.beatSpacing);
+      const firstBeat = Math.ceil((beatDistance - halfSpan - beatLineX(0)) / layout.beatSpacing);
       context.lineWidth = settings.beatLineWidth;
       context.strokeStyle = GAME_THEME.ledColor;
       context.globalAlpha = settings.beatLineOpacity;
       const lines = new Path2D();
       for (let beat = firstBeat; ; beat++) {
-        const worldX = beatLineX(beat) - distance;
+        const worldX = beatLineX(beat) - beatDistance;
         if (worldX > halfSpan) break;
         lines.moveTo(projectX(worldX, horizon), horizonY);
         lines.lineTo(projectX(worldX, 0), height);
@@ -278,7 +261,7 @@ const Platformer = (() => {
     const pixel = Math.max(1, Math.round(settings.groundLineWidth / py)) * py;
     const y = Math.round((horizonY - pixel / 2) / py) * py;
     const bumpWidth = item => Math.round(item.sprite.image.naturalWidth * pixel / px) * px;
-    updateTrack(bumps, groundDistance, settings.bumps.gap, () => ({}), bumpWidth, groundLookBehind());
+    updateTrack(bumps, groundDistance, settings.bumps.gap, () => ({}), bumpWidth, groundLookBehind(), groundLookAhead());
     context.fillStyle = GAME_THEME.ledColor;
     context.globalAlpha = settings.groundLineOpacity;
     const groundLine = new Path2D();
@@ -343,14 +326,17 @@ const Platformer = (() => {
   }
   function drawMenuRunners(now, cameraX) {
     const { rest } = PlayerAnimations;
-    if (homePlayer) {
+    if (menuPlayer) {
       const config = MENU_TRANSITIONS.homeEntrance;
-      const t = homeEntrance === undefined ? 1 : Math.max(0, Math.min(1, (now - homeEntrance) / config.durationMs));
+      const t = entranceAt === undefined ? 1 : Math.max(0, Math.min(1, (now - entranceAt) / config.durationMs));
       const progress = 1 - (1 - t) ** 2;
-      const x = (config.startX + (rest.x - config.startX) * progress - cameraX) * width;
+      const anchor = MENU_TRANSITIONS.positions[runnerView].x;
+      const stride = runnerView === 'practice' && practiceTempo && !MenuCamera.reducedMotion ?
+        PlayerAnimations.runOffset(groundDistance) * height * t : 0;
+      const x = (anchor + config.startX + (rest.x - config.startX) * progress - cameraX) * width + stride;
       const lift = Math.abs(Math.sin(Math.PI * config.strideCycles * t)) * config.bounce * (1 - t);
-      drawPlayer({ ...rest, lift }, homePlayer, x);
-      if (t === 1) homeEntrance = undefined;
+      drawPlayer({ ...rest, lift }, menuPlayer, x);
+      if (t === 1) entranceAt = undefined;
     }
     if (!previewPlayer) return;
     const config = CHARACTERS_MENU;
@@ -379,7 +365,7 @@ const Platformer = (() => {
     // Include the spikeball's full sweep so it cannot swing back into a returning player.
     const swing = type.swingSeconds > 0 ? size * Math.sin(Math.abs(type.swingDegrees) * Math.PI / 180) : 0;
     const playerSize = layout.player.size * scaleAt(layout.lanes.right) / scaleAt(centerDepth);
-    const playerWidth = homePlayer?.image.naturalWidth ? spriteWidth(homePlayer, playerSize) : playerSize;
+    const playerWidth = menuPlayer?.image.naturalWidth ? spriteWidth(menuPlayer, playerSize) : playerSize;
     const rotating = action.config.turnsPerBeat || action.from.roll !== 0;
     const playerRadius = (rotating ? Math.hypot(playerWidth, playerSize) : playerWidth) / 2;
     const padding = playerRadius + playerSettings.stride.sway + playerSettings.clearance;
@@ -418,29 +404,30 @@ const Platformer = (() => {
       advanceWorld(now);
       context.clearRect(0, 0, width, height);
       const camera = MenuCamera.position;
-      const distance = groundDistance + (camera.x - cameraNudge) * width / (height * scaleAt(centerDepth));
+      const cameraScale = width / (height * scaleAt(centerDepth));
+      const gameDistance = groundDistance - cameraNudge * cameraScale;
+      const distance = gameDistance + camera.x * cameraScale;
       context.save();
       context.translate(0, -camera.y * height);
       drawClouds(camera);
-      drawUnderground(camera.y);
       if (camera.y > -layout['ground-line'] && camera.y < 1) {
         drawGroundParticles(distance);
-        drawGround(distance);
+        drawGround(distance, run ? gameDistance : distance);
         if (run) {
           const pose = updatePlayer();
           const runner = runnerDistance();
-          const left = distance - width / (2 * height);
+          const left = gameDistance - width / (2 * height);
           // An obstacle can leave the camera before the runner reaches it.
           const discardBefore = Math.min(left, runner - layout.beatSpacing);
           while (obstacles.length && obstacleX(obstacles[0]) + obstacleSize(obstacles[0]) < discardBefore) obstacles.shift();
           for (const obstacle of obstacles) {
-            if (obstacle.depth >= pose.fromBottom) drawObstacle(obstacle, distance);
+            if (obstacle.depth >= pose.fromBottom) drawObstacle(obstacle, gameDistance);
           }
-          const scroll = (runner - distance) * height * scaleAt(centerDepth);
+          const scroll = (runner - gameDistance) * height * scaleAt(centerDepth);
           const stride = PlayerAnimations.runOffset(runner - beatOrigin) * height * pose.stride;
-          drawPlayer(pose, homePlayer, pose.x * width + scroll + stride);
+          drawPlayer(pose, menuPlayer, pose.x * width + scroll + stride);
           for (const obstacle of obstacles) {
-            if (obstacle.depth < pose.fromBottom) drawObstacle(obstacle, distance);
+            if (obstacle.depth < pose.fromBottom) drawObstacle(obstacle, gameDistance);
           }
         } else {
           drawMenuRunners(now, camera.x);
@@ -451,12 +438,17 @@ const Platformer = (() => {
     frame = requestAnimationFrame(render);
   }
   return {
-    enterHome(runner) {
-      homePlayer = runnerSprite(runner);
+    enterRunner(runner, view) {
+      menuPlayer = runnerSprite(runner);
+      runnerView = view;
       const config = MENU_TRANSITIONS.homeEntrance;
-      homeEntrance = config.enabled && config.durationMs > 0 && !MenuCamera.reducedMotion ? performance.now() + config.delayMs : undefined;
+      entranceAt = config.enabled && config.durationMs > 0 && !MenuCamera.reducedMotion ? performance.now() + config.delayMs : undefined;
     },
-    hideHome() { homePlayer = undefined; },
+    hideRunner() { menuPlayer = undefined; },
+    setPracticeTempo(bpm) {
+      advanceWorld(performance.now());
+      practiceTempo = bpm;
+    },
     previewRunner(runner, { previous, step } = {}) {
       previewPlayer = runnerSprite(runner);
       previewSwap = previous && CHARACTERS_MENU.swapMs > 0 && !MenuCamera.reducedMotion ?
@@ -475,7 +467,8 @@ const Platformer = (() => {
     },
     startRun(startedAt, nextBeat) {
       advanceWorld(startedAt);
-      homeEntrance = undefined;
+      entranceAt = undefined;
+      practiceTempo = 0;
       beatOrigin = groundDistance;
       cameraNudge = 0;
       run = { beats: 0, startedAt, beatMs: nextBeat - startedAt, cue: 0, position: 0, confirmedCue: 0, earlyPress: 0 };

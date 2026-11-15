@@ -1,8 +1,8 @@
-/* Distances use LED screen width; frame rate changes the steps, not the speed. */
+/* Speeds are percentages of the LED screen width per second. */
 const SCREEN_ANIMATIONS = {
-  'scroll-loop': { frameRate: 60, speed: 57, gap: 30 },
-  'scroll-stop': { frameRate: 27, speed: 364 },
-  'static': { frameRate: 27, speed: 0 }
+  'scroll-loop': { speed: 57, gap: 30 },
+  'scroll-stop': { speed: 364 },
+  'static': { speed: 0 }
 };
 /* Hold time starts once the title has reached the center. */
 const SCREEN_SEQUENCE_SETTINGS = {
@@ -16,7 +16,7 @@ const SCREEN_SEQUENCE_SETTINGS = {
   track.setAttribute('aria-hidden', 'true');
   let copy, animation, settings, ready = false;
   let screenWidth = 0, start = 0, cycle = 0, target = 0, travelled = 0;
-  let lastTick = null, stopped = false;
+  let frame = null, lastTick = null, stopped = false;
   let sequence = null;
   let onComplete = null;
 
@@ -60,29 +60,35 @@ const SCREEN_SEQUENCE_SETTINGS = {
     while (track.children.length < count) track.append(copy.cloneNode(true));
     render();
     message.classList.add('is-animating');
+    scheduleTick();
   }
-  function show(text, name = 'scroll-loop', { restart = true, icon = null, variant = 'main', onComplete: complete = null } = {}) {
+  function makeIcon(icon) {
+    const symbol = document.createElement('span');
+    symbol.className = `led-icon ${icon}`;
+    symbol.setAttribute('aria-hidden', 'true');
+    return symbol;
+  }
+  function show(content, name = 'scroll-loop', { restart = true, icon = null, variant = 'main', onComplete: complete = null } = {}) {
     sequence = null; // Switching views cancels any pending title/loop transition.
     onComplete = complete;
     if (!SCREEN_ANIMATIONS[name]) throw new Error(`Unknown screen animation: ${name}`);
     const changed = animation !== name;
     animation = name;
     settings = SCREEN_ANIMATIONS[name];
+    cycle = 0;
     if (restart || changed) { travelled = 0; lastTick = null; stopped = false; }
     message.classList.remove('is-animating');
     message.dataset.animation = name;
     message.dataset.typography = variant;
     message.style.opacity = '1';
-    message.setAttribute('aria-label', text);
+    const parts = Array.isArray(content) ? content : [content];
+    message.setAttribute('aria-label', parts.map(part => typeof part === 'string' ? part : part.label).join(''));
     copy = document.createElement('span');
     copy.className = 'scroll-loop-copy';
-    copy.textContent = text;
+    copy.append(...parts.map(part => typeof part === 'string' ? part : makeIcon(part.icon)));
     if (icon) {
       copy.classList.add('screen-main-metric');
-      const symbol = document.createElement('span');
-      symbol.className = `led-icon ${icon}`;
-      symbol.setAttribute('aria-hidden', 'true');
-      copy.prepend(symbol);
+      copy.prepend(makeIcon(icon));
     }
     track.replaceChildren(copy);
     message.replaceChildren(track);
@@ -91,18 +97,29 @@ const SCREEN_SEQUENCE_SETTINGS = {
   function titleLoop(title, loopText, { holdSeconds = SCREEN_SEQUENCE_SETTINGS['title-loop'].holdSeconds, onLoopStart = null } = {}) {
     show(title, 'scroll-stop');
     sequence = { loopText, holdSeconds, elapsed: 0, onLoopStart };
+    scheduleTick();
+  }
+  function clear() {
+    if (frame !== null) cancelAnimationFrame(frame);
+    frame = lastTick = copy = sequence = onComplete = null;
+    cycle = 0;
+    message.classList.remove('is-animating');
+    message.removeAttribute('aria-label');
+    message.replaceChildren();
+  }
+  function scheduleTick() {
+    if (frame === null && cycle && (!stopped || sequence)) frame = requestAnimationFrame(tick);
   }
   function tick(now) {
-    const frameMs = 1000 / Math.max(1, settings.frameRate);
-    if (lastTick === null) lastTick = now;
-    const frames = Math.floor((now - lastTick) / frameMs);
-    if (frames > 0) {
-      lastTick += frames * frameMs;
+    frame = null;
+    const elapsed = (now - (lastTick ?? now)) / 1000;
+    lastTick = now;
+    if (cycle && elapsed > 0) {
       if (!stopped) {
-        travelled += frames * frameMs / 1000 * settings.speed / 100;
+        travelled += elapsed * settings.speed / 100;
         render();
       } else if (sequence) {
-        sequence.elapsed += frames * frameMs / 1000;
+        sequence.elapsed += elapsed;
         if (sequence.elapsed >= sequence.holdSeconds) {
           const nextText = sequence.loopText;
           const callback = sequence.onLoopStart;
@@ -111,15 +128,13 @@ const SCREEN_SEQUENCE_SETTINGS = {
         }
       }
     }
-    requestAnimationFrame(tick);
+    scheduleTick();
   }
-  window.ScreenText = { show, titleLoop, setVisible(visible) { message.style.opacity = visible ? '1' : '0'; } };
-  show(message.textContent, message.dataset.animation);
+  window.ScreenText = { show, titleLoop, clear, setVisible(visible) { message.style.opacity = visible ? '1' : '0'; } };
   screenFontsReady.then(() => {
     ready = true;
     measure();
     new ResizeObserver(measure).observe(display);
-    requestAnimationFrame(tick);
   });
   document.addEventListener('visibilitychange', () => { lastTick = null; });
 })();

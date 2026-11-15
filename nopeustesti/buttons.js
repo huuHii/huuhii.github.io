@@ -79,24 +79,30 @@
     if (state.holds.has(id)) return;
     const wasHeld = state.holds.size > 0;
     state.holds.add(id);
-    if (!wasHeld) state.accepted = !inputGuard();
+    if (!wasHeld) {
+      state.accepted = !inputGuard();
+      state.cancelled = false;
+    }
     render(state);
     if (!wasHeld && state.accepted) {
       GameAudio.press();
       document.dispatchEvent(new CustomEvent('game-button-press', { detail: { color: state.color } }));
     }
   }
-  function release(state, id) {
+  function release(state, id, cancelled = false) {
     if (!state.holds.delete(id)) return;
+    if (cancelled) state.cancelled = true;
     render(state);
     if (!state.holds.size && state.accepted) {
       state.accepted = false;
       GameAudio.release();
-      document.dispatchEvent(new CustomEvent('game-button-release', { detail: { color: state.color } }));
+      document.dispatchEvent(new CustomEvent('game-button-release', {
+        detail: { color: state.color, cancelled: state.cancelled }
+      }));
     }
   }
   function releaseAll() {
-    for (const state of states.values()) for (const id of [...state.holds]) release(state, id);
+    for (const state of states.values()) for (const id of [...state.holds]) release(state, id, true);
   }
   const arrows = preset === 'arrows-v1';
   pad.dataset.preset = preset;
@@ -129,7 +135,7 @@
       press(state, event.pointerId);
     });
     for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-      button.addEventListener(type, event => release(state, event.pointerId));
+      button.addEventListener(type, event => release(state, event.pointerId, type !== 'pointerup'));
     }
     button.addEventListener('keydown', event => {
       if (![' ', 'Enter'].includes(event.key)) return;
@@ -142,8 +148,8 @@
       release(state, `key:${event.key}`);
     });
     button.addEventListener('blur', () => {
-      release(state, 'key: ');
-      release(state, 'key:Enter');
+      release(state, 'key: ', true);
+      release(state, 'key:Enter', true);
     });
     button.addEventListener('contextmenu', event => event.preventDefault());
   }

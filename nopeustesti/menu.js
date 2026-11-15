@@ -3,7 +3,7 @@
   const hud = document.querySelector('.game-hud-position');
   const footer = hud.querySelector('.screen-bottom-row');
   const announcement = document.querySelector('.menu-announcement');
-  const practiceSpeeds = [100, 200, 300, 400, 500, 600, 700];
+  const practiceSpeeds = PRACTICE_MENU.startingSpeeds;
   const standbyIdleSeconds = 5;
   const characterKey = 'nopeustesti.runner';
   const directions = { red: 'left', yellow: 'down', blue: 'up', green: 'right' };
@@ -12,7 +12,18 @@
   let lockedUntil = 0;
   let settingsIndex = 0;
   let settingsTop = 0;
-  let practiceIndex = 0;
+  let practiceIndex = Math.max(0, practiceSpeeds.indexOf(PRACTICE_MENU.initialSpeed));
+  let activeHold;
+  const menuHolds = {
+    home: {
+      right: {
+        label: 'HOLD TO PRACTICE',
+        duration: PRACTICE_MENU.holdMs,
+        tap: () => document.dispatchEvent(new CustomEvent('game-start-request')),
+        hold: () => go('practice')
+      }
+    }
+  };
   let savedRunner;
   try { savedRunner = localStorage.getItem(characterKey); } catch {}
   const runners = CHARACTERS_MENU.options;
@@ -31,11 +42,14 @@
     return node;
   }
   function arrow(direction) {
-    return icon(`led-arrow led-arrow-${direction}`);
+    const shell = element('span', 'camera-arrow');
+    shell.dataset.arrow = direction;
+    shell.append(icon(`led-arrow led-arrow-${direction}`));
+    return shell;
   }
   function hint(direction, label, right = direction === 'right') {
     const node = element('span', 'camera-hint');
-    const words = element('span', '', label);
+    const words = element('span', 'camera-hint-label', label);
     node.append(...(right ? [words, arrow(direction)] : [arrow(direction), words]));
     return node;
   }
@@ -49,12 +63,11 @@
     panels.set(id, section);
     return section;
   }
-  const practiceMenu = { title: 'PRACTICE', caption: 'SET STARTING SPEED' };
   panel('settings', SETTINGS_MENU);
   panel('characters', CHARACTERS_MENU);
   panel('highscores', HIGHSCORES_MENU);
   panel('statistics', STATISTICS_MENU);
-  panel('practice', practiceMenu);
+  panel('practice', PRACTICE_MENU);
 
   function drawPanel(id, config, content, hints, counter = '') {
     const target = panels.get(id);
@@ -146,7 +159,7 @@
       content.append(table);
     }
     drawPanel('highscores', HIGHSCORES_MENU, content, [
-      hint('down', 'SURFACE'), hint('up', 'STATS'), hint('right', 'PRACTICE')
+      hint('down', 'SURFACE'), hint('up', 'STATS')
     ]);
   }
 
@@ -175,8 +188,8 @@
       element('span', '', `${Math.round(GameRules.bpmAt(practiceSpeeds[practiceIndex]))} BPM`));
     const speed = hint('up', 'SPEED');
     speed.append(arrow('down'));
-    drawPanel('practice', practiceMenu, content, [
-      hint('left', 'HIGHSCORES'), speed, hint('right', 'PRACTICE')
+    drawPanel('practice', PRACTICE_MENU, content, [
+      hint('left', 'SURFACE'), speed, hint('right', 'START')
     ], counter(practiceIndex, practiceSpeeds.length));
   }
 
@@ -188,7 +201,8 @@
     scores.append(icon('led-star'), element('span', '', number.format(GameRecords.highscore)));
     scores.setAttribute('aria-label', `Up: highscores, best ${GameRecords.highscore}`);
     footer.replaceChildren(hint('left', 'RUNNER'), scores, hint('down', 'SETTINGS'), hint('right', 'PLAY'));
-    ScreenText.titleLoop('STANDARD', 'PRESS RIGHT TO RUN');
+    const rightArrow = { icon: 'led-arrow led-arrow-right', label: 'right arrow' };
+    ScreenText.titleLoop('STANDARD', ['PRESS ', rightArrow, ' TO START  /  HOLD ', rightArrow, ' FOR PRACTICE']);
   }
 
   function draw(target) {
@@ -199,17 +213,26 @@
     return MenuCamera.moving || performance.now() < lockedUntil;
   }
   function enterHome() {
-    Platformer.enterHome(runners[runnerIndex]);
+    Platformer.enterRunner(runners[runnerIndex], 'home');
     drawHome();
   }
   function go(target) {
+    cancelHold();
+    if (target === 'characters') ScreenText.clear();
+    if (target === 'practice') {
+      panels.get('practice').hidden = false;
+      Platformer.setPracticeTempo(GameRules.bpmAt(practiceSpeeds[practiceIndex]));
+    } else if (view === 'practice') {
+      Platformer.setPracticeTempo(0);
+    }
     if (target !== 'home') draw(target);
     MenuCamera.move(target, () => {
       view = target;
       lockedUntil = performance.now() + MENU_TRANSITIONS.settleMs;
       selectPanel(view);
       if (view === 'home') enterHome();
-      else Platformer.hideHome();
+      else if (view === 'practice') Platformer.enterRunner(runners[runnerIndex], 'practice');
+      else Platformer.hideRunner();
       announcement.textContent = view === 'home' ? 'Surface' : panels.get(view).getAttribute('aria-label');
     });
   }
@@ -217,10 +240,53 @@
     document.dispatchEvent(new CustomEvent('practice-start-request', { detail: { startingSpeed: practiceSpeeds[practiceIndex] } }));
   }
 
+  function cancelHold() {
+    if (!activeHold) return;
+    const { frame, ring, label, normalLabel } = activeHold;
+    cancelAnimationFrame(frame);
+    ring?.removeAttribute('data-holding');
+    ring?.style.removeProperty('--hold-progress');
+    if (label) label.textContent = normalLabel;
+    activeHold = undefined;
+  }
+
+  function completeHold(held, longPress) {
+    cancelHold();
+    if (view !== held.view || blocksInput() || GameSession.phase !== 'idle') return;
+    if (longPress) held.action.hold();
+    else held.action.tap?.();
+  }
+
+  function beginHold(direction, action) {
+    const container = view === 'home' ? footer : panels.get(view);
+    const ring = container.querySelector(`.camera-arrow[data-arrow="${direction}"]`);
+    const hint = ring?.closest('.camera-hint');
+    const label = hint?.querySelector('.camera-hint-label');
+    const held = { direction, action, view, ring, label, normalLabel: label?.textContent, startedAt: performance.now() };
+    activeHold = held;
+    ring?.setAttribute('data-holding', '');
+    if (label && action.label) label.textContent = action.label;
+    function tick(now) {
+      const progress = Math.max(0, Math.min(1, (now - held.startedAt) / action.duration));
+      ring?.style.setProperty('--hold-progress', progress);
+      if (progress >= 1) completeHold(held, true);
+      else held.frame = requestAnimationFrame(tick);
+    }
+    held.frame = requestAnimationFrame(tick);
+  }
+
+  document.addEventListener('game-button-release', ({ detail: { color, cancelled } }) => {
+    const held = activeHold;
+    if (!held || held.direction !== directions[color]) return;
+    if (cancelled) cancelHold();
+    else completeHold(held, performance.now() - held.startedAt >= held.action.duration);
+  });
+
   document.addEventListener('game-button-press', ({ detail: { color } }) => {
     if (blocksInput() || window.GameSession?.blocksMenu) return;
     const direction = directions[color];
     if (!direction) return;
+    cancelHold();
     const phase = window.GameSession?.phase;
     if (phase === 'result' || phase === 'practice-result') {
       if (direction === 'right') {
@@ -229,11 +295,7 @@
       } else if (direction === 'left') {
         GameSession.leave();
         if (phase === 'practice-result') {
-          hud.hidden = true;
-          panels.get('practice').hidden = false;
-          Platformer.setVisible(true);
-          selectPanel('practice');
-          drawPractice();
+          go('home');
         } else {
           selectPanel('home');
           enterHome();
@@ -243,9 +305,10 @@
       return;
     }
     GameLights.standby(standbyIdleSeconds);
+    const holdAction = menuHolds[view]?.[direction];
+    if (holdAction) return beginHold(direction, holdAction);
     if (view === 'home') {
-      if (direction === 'right') document.dispatchEvent(new CustomEvent('game-start-request'));
-      else go({ left: 'characters', down: 'settings', up: 'highscores' }[direction]);
+      go({ left: 'characters', down: 'settings', up: 'highscores' }[direction]);
     } else if (view === 'settings') {
       const { rows, visibleRows } = SETTINGS_MENU;
       if (direction === 'up' && settingsIndex === 0) return go('home');
@@ -275,14 +338,14 @@
     } else if (view === 'highscores') {
       if (direction === 'down') go('home');
       if (direction === 'up') go('statistics');
-      if (direction === 'right') go('practice');
     } else if (view === 'statistics') {
       if (direction === 'down') go('highscores');
     } else if (view === 'practice') {
-      if (direction === 'left') go('highscores');
+      if (direction === 'left') go('home');
       else if (direction === 'right') startPractice();
       else {
         practiceIndex = Math.max(0, Math.min(practiceSpeeds.length - 1, practiceIndex + (direction === 'up' ? 1 : -1)));
+        Platformer.setPracticeTempo(GameRules.bpmAt(practiceSpeeds[practiceIndex]));
         drawPractice();
         announcement.textContent = `Starting speed ${practiceSpeeds[practiceIndex]}`;
       }
@@ -298,7 +361,7 @@
       panels.get('practice').hidden = practice;
       hud.hidden = false;
       hud.removeAttribute('aria-hidden');
-      Platformer.setVisible(!practice);
+      if (practice) Platformer.setPracticeTempo(GameRules.bpmAt(practiceSpeeds[practiceIndex]));
     }
   };
   GameButtons.setInputGuard(blocksInput);

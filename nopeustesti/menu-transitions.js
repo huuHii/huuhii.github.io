@@ -6,7 +6,7 @@ const MENU_TRANSITIONS = {
     settings: { x: 0, y: 1 },
     highscores: { x: 0, y: -1 },
     statistics: { x: 0, y: -2 },
-    practice: { x: 1, y: -1 }
+    practice: { x: 1, y: 0 }
   },
   horizontalMs: 620,
   verticalMs: 680,
