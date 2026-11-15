@@ -11,8 +11,10 @@ const BUTTON_CONFIG = {
       buttonHue: { left: 0, down: 55, up: 225, right: 130 },
       // Saturation multipliers for both the unlit and lit sprites.
       buttonSaturation: { left: 1.2, down: 1.5, up: .7, right: 1 },
-      pressDistancePx: 22,
-      transitionMs: 60
+      pressDistancePercent: 6, // Relative to the height of the button.
+      pressMs: 60,
+      minPressMs: 90,
+      releaseMs: 110
     },
     'legacy-round-colored': {
       order: ['red', 'yellow', 'blue', 'green']

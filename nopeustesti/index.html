@@ -20,22 +20,33 @@
   <main class="game-stage" aria-label="Nopeustesti reaction game">
     <section class="score-screen" aria-label="Game display">
       <img class="screen-art" src="assets/led-screen-new.png" alt="">
-      <canvas class="platformer-scene" aria-hidden="true" hidden></canvas>
-      <div class="screen-ui" aria-live="polite">
-        <span class="practice-mode-label" hidden><span class="led-icon led-practice-start" aria-hidden="true"></span>PRACTICE MODE</span>
-        <span class="screen-message" data-animation="scroll-loop" aria-label="PRESS GREEN TO PLAY">PRESS GREEN TO PLAY</span>
-        <div class="screen-bottom-row">
-          <span class="screen-bottom-item screen-bottom-left"><span class="led-icon led-arrow led-arrow-left" aria-hidden="true"></span><span>MENU</span></span>
-          <span class="screen-bottom-item screen-bottom-center"><span class="led-icon led-star" aria-hidden="true"></span><span>0</span></span>
-          <span class="screen-bottom-item screen-bottom-right"><span>PLAY</span><span class="led-icon led-arrow" aria-hidden="true"></span></span>
+      <div class="crt-scene">
+        <canvas class="platformer-scene" aria-hidden="true" hidden></canvas>
+      </div>
+      <div class="crt-hud">
+        <div class="screen-ui" aria-live="polite">
+          <span class="practice-mode-label" hidden><span class="led-icon led-practice-start" aria-hidden="true"></span>PRACTICE MODE</span>
+          <span class="screen-message" data-animation="scroll-loop" aria-label="PRESS GREEN TO PLAY">PRESS GREEN TO PLAY</span>
+          <div class="screen-bottom-row">
+            <span class="screen-bottom-item screen-bottom-left"><span class="led-icon led-arrow led-arrow-left" aria-hidden="true"></span><span>MENU</span></span>
+            <span class="screen-bottom-item screen-bottom-center"><span class="led-icon led-star" aria-hidden="true"></span><span>0</span></span>
+            <span class="screen-bottom-item screen-bottom-right"><span>PLAY</span><span class="led-icon led-arrow" aria-hidden="true"></span></span>
+          </div>
         </div>
       </div>
+      <svg class="crt-filter" width="0" height="0" aria-hidden="true" focusable="false">
+        <filter id="crt-curvature" x="0%" y="0%" width="100%" height="100%" color-interpolation-filters="sRGB">
+          <feImage x="0" y="0" result="field" preserveAspectRatio="none"></feImage>
+          <feDisplacementMap in="SourceGraphic" in2="field" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
+        </filter>
+      </svg>
     </section>
     <section class="button-pad" aria-label="Game buttons"></section>
   </main>
   <script src="layout.js"></script>
   <script src="screen-ui.js"></script>
   <script src="theme.js"></script>
+  <script src="crt-effect.js"></script>
   <script src="screen-animations.js"></script>
   <script src="audio.js"></script>
   <script src="button-config.js"></script>

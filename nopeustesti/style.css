@@ -21,6 +21,22 @@ body { overflow:hidden; background:linear-gradient(180deg,var(--game-top),var(--
 .screen-art { position:absolute; inset:0; display:block; width:100%; height:100%; object-fit:fill; }
 .platformer-scene { position:absolute; inset:1.4% 1.2%; width:97.6%; height:97.2%; border-radius:2.5cqw; pointer-events:none; }
 .score-screen::after { content:""; position:absolute; z-index:1; inset:0; background:var(--screen-tint); opacity:var(--screen-tint-strength); mix-blend-mode:color; pointer-events:none; }
+.crt-scene, .crt-hud { position:absolute; inset:0; pointer-events:none; }
+.crt-scene:not(:has(canvas[hidden])), .crt-hud { filter:var(--crt-curvature, none); }
+.crt-hud { z-index:2; }
+.crt-filter { position:absolute; pointer-events:none; }
+.crt-overlay { position:absolute; inset:1.4% 1.2%; border-radius:2.5cqw; overflow:hidden; pointer-events:none; }
+.crt-scanlines { z-index:3; }
+.crt-scanlines::before { content:""; position:absolute; inset:calc(-1 * var(--crt-pitch)) 0; background:var(--crt-scanlines); }
+.crt-scanlines[data-moving]::before { animation:crt-scanlines var(--crt-scanline-duration) linear infinite; }
+.crt-glass { z-index:3; background:radial-gradient(ellipse at center, transparent 45%, rgb(0 0 0 / var(--crt-edge-shade))); }
+.crt-roll { position:absolute; top:0; left:0; width:100%; height:var(--crt-roll-height); background:linear-gradient(transparent, rgb(0 0 0 / var(--crt-roll-opacity)), transparent); animation:crt-roll var(--crt-roll-duration) linear var(--crt-roll-delay) infinite; }
+@keyframes crt-scanlines { to { transform:translateY(var(--crt-scanline-travel)); } }
+@keyframes crt-roll { from { transform:translateY(var(--crt-roll-start)); } to { transform:translateY(var(--crt-roll-end)); } }
+@media (prefers-reduced-motion:reduce) {
+  .crt-scanlines[data-moving]::before { animation:none; }
+  .crt-roll { display:none; animation:none; }
+}
 .screen-ui { position:absolute; z-index:2; inset:var(--led-padding-top, 4cqw) var(--led-padding-x, 8cqw) var(--led-padding-bottom, 5cqw); display:grid; grid-template-rows:minmax(0, 1fr) auto; overflow:visible; white-space:nowrap; color:var(--led-color); text-shadow:0 0 var(--led-glow-blur) var(--led-glow-color),0 0 calc(var(--led-glow-blur) * 2) var(--led-glow-color); line-height:1; }
 .screen-message { display:flex; min-width:0; align-items:center; justify-content:center; transform:translateY(var(--led-main-text-offset, 0cqw)); font-family:var(--led-main-font, 'DS-DIGIT', monospace); font-size:var(--led-main-font-size, 15cqw); letter-spacing:var(--led-letter-spacing, .08em); }
 .screen-message[data-animation] { position:relative; visibility:hidden; }
@@ -59,12 +75,13 @@ body { overflow:hidden; background:linear-gradient(180deg,var(--game-top),var(--
 .arrow-art.is-mirrored { transform:scaleX(-1); }
 .arrow-backframe, .arrow-frontframe { filter:var(--arrow-frame-filter, none); }
 .arrow-backframe { z-index:0; }
-.arrow-cap { z-index:1; filter:hue-rotate(var(--arrow-hue)) saturate(var(--arrow-saturation)); transform:translateY(0); transition:transform var(--arrow-transition) ease-out; }
+.arrow-cap { z-index:1; transform:translateY(0); transition:transform var(--arrow-release-duration) ease-out; will-change:transform; }
+.arrow-cap img { filter:hue-rotate(var(--arrow-hue)) saturate(var(--arrow-saturation)); }
 .arrow-frontframe { z-index:2; }
 .arrow-art .arrow-lit, .arrow-art[data-lit="true"] .arrow-cap img:first-child { visibility:hidden; }
 .arrow-art[data-lit="true"] .arrow-lit { visibility:visible; }
-.game-button[aria-pressed="true"] .arrow-cap { transform:translateY(var(--arrow-press-distance)); }
-@media (prefers-reduced-motion:reduce) { .arrow-cap { transition:none; } }
+.arrow-cap.is-pressed { transform:translateY(var(--arrow-press-distance)); transition-duration:var(--arrow-press-duration); }
+@media (prefers-reduced-motion:reduce) { .arrow-cap, .arrow-cap.is-pressed { transition:none; will-change:auto; } }
 
 /* Game metrics sit inside the display, away from its corner controls. */
 .game-metric { display:flex; align-items:center; justify-content:center; gap:.25em; }

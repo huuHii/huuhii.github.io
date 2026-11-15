@@ -1,4 +1,4 @@
-/* Gameplay owns the buttons only during READY, play and result animations. */
+/* Gameplay controls the lights from READY through the result screen. */
 (() => {
   const colors = ['red', 'yellow', 'blue', 'green'];
   const footer = document.querySelector('.screen-bottom-row');
@@ -6,7 +6,7 @@
   let phase = 'idle', practice = false, score = 0, bpm = 0;
   let startingScore = 0, beats = 0, queue = [], lastColor = null;
   const plannedColors = [];
-  let beatTimer = null, returnTimer = null, session = 0, nextBeat = 0;
+  let beatTimer = null, session = 0, nextBeat = 0;
   function element(className, value) {
     const node = document.createElement('span');
     node.className = className;
@@ -25,9 +25,9 @@
   }
   function renderFooter(result = false) {
     const nodes = [];
-    if (result && !practice) {
+    if (result) {
       const menu = element('screen-bottom-item screen-bottom-left');
-      menu.append(icon('led-arrow led-arrow-left'), element('', 'MENU'));
+      menu.append(icon('led-arrow led-arrow-left'), element('', practice ? 'RETURN' : 'MENU'));
       nodes.push(menu);
     }
     const tempo = metric('led-metronome', Math.round(bpm));
@@ -39,18 +39,17 @@
       highscore.setAttribute('aria-label', `Highscore ${best}`);
       nodes.push(highscore);
     }
-    if (result && !practice) {
+    if (result) {
       const replay = element('screen-bottom-item screen-bottom-right');
-      replay.append(element('', 'PLAY'), icon('led-arrow'));
+      replay.append(element('', practice ? 'RETRY' : 'PLAY'), icon('led-arrow'));
       nodes.push(replay);
     }
-    footer.dataset.view = practice ? 'practice-game' : result ? 'game-result' : 'game';
+    footer.dataset.view = result ? (practice ? 'practice-result' : 'game-result') : (practice ? 'practice-game' : 'game');
     footer.replaceChildren(...nodes);
   }
   function leave() {
     session++;
     clearTimeout(beatTimer);
-    clearTimeout(returnTimer);
     GameLights.cancel();
     ScreenText.setVisible(true);
     GameAudio.stopTone();
@@ -69,22 +68,14 @@
     if (!practice) GameRecords.save(score);
     ScreenText.show(String(score), 'static', { variant: 'score' });
     GameAudio.gameOver();
-    renderFooter(!practice);
+    renderFooter(true);
     const token = session;
     GameLights.gameOver(() => {
       if (session !== token) return;
       ScreenText.setVisible(true);
-      if (practice) {
-        phase = 'practice-result';
-        returnTimer = setTimeout(() => {
-          if (session !== token) return;
-          leave();
-          GameMenu.returnToPracticeValue();
-        }, GAME_LIGHT_ANIMATIONS.practiceResultHoldSeconds * 1000);
-      } else {
-        phase = 'result';
-        GameButtons.setMenuFeedback(true);
-      }
+      phase = practice ? 'practice-result' : 'result';
+      GameButtons.setMenuFeedback(true);
+      GameLights.standby();
     }, lit => { if (session === token) ScreenText.setVisible(lit); });
   }
   function planColors(count) {
@@ -171,7 +162,7 @@
   });
   window.GameSession = {
     get phase() { return phase; },
-    get blocksMenu() { return ['ready', 'playing', 'ending', 'practice-result'].includes(phase); },
+    get blocksMenu() { return ['ready', 'playing', 'ending'].includes(phase); },
     get score() { return score; },
     get bpm() { return bpm; },
     leave

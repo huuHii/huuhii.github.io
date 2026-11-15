@@ -6,7 +6,7 @@ const MENU_ITEMS = [
   { id: 'beep-volume', text: 'BEEP VOL', channel: 'beepVolume', footer: 'volume' },
   { id: 'highscores', text: 'HIGHSCORES: 0', footer: 'menu' }
 ];
-const MENU_SETTINGS = { limitFeedbackSeconds: 0.8 };
+const MENU_SETTINGS = { limitFeedbackSeconds: 0.8, standbyIdleSeconds: 5 };
 const PRACTICE_SETTINGS = {
   startingSpeeds: [100, 200, 300, 400, 500, 600, 700],
   initialIndex: 0
@@ -110,27 +110,52 @@ const PRACTICE_SETTINGS = {
       ScreenText.show(heading, item.animation || 'scroll-stop');
     }
   }
+  function resumeStandbyAfterIdle() {
+    GameLights.standby(MENU_SETTINGS.standbyIdleSeconds);
+  }
+  function startPractice() {
+    document.dispatchEvent(new CustomEvent('practice-start-request', { detail: { startingSpeed: speed(), bpm: speed() } }));
+  }
   document.addEventListener('game-button-press', event => {
     if (window.GameSession?.blocksMenu) return;
-    if (window.GameSession?.phase === 'result') GameSession.leave();
     const color = event.detail.color;
+    const phase = window.GameSession?.phase;
+    if (phase === 'result' || phase === 'practice-result') {
+      if (color !== 'red' && color !== 'green') return;
+      if (phase === 'practice-result') {
+        if (color === 'green') startPractice();
+        else {
+          GameSession.leave();
+          current = MENU_ITEMS.findIndex(item => item.id === 'practice');
+          practiceDetail = true;
+          renderFooter(MENU_ITEMS[current]);
+          renderValue();
+          resumeStandbyAfterIdle();
+        }
+        return;
+      }
+      if (color === 'red') GameSession.leave();
+    }
     const item = MENU_ITEMS[current];
     if (color === 'red') {
       if (item.id === 'practice' && practiceDetail) enter();
       else { current = (current + 1) % MENU_ITEMS.length; enter(); }
+      resumeStandbyAfterIdle();
     } else if (color === 'green') {
       if (item.id === 'practice' && practiceDetail) {
-        document.dispatchEvent(new CustomEvent('practice-start-request', { detail: { startingSpeed: speed(), bpm: speed() } }));
+        startPractice();
       } else if (item.id === 'standard') {
         document.dispatchEvent(new CustomEvent('game-start-request'));
       } else {
         current = MENU_ITEMS.findIndex(entry => entry.id === 'standard');
         enter();
+        resumeStandbyAfterIdle();
       }
     } else {
       const delta = color === 'yellow' ? -1 : color === 'blue' ? 1 : 0;
       if (!delta) return;
       if (item.id === 'practice') {
+        resumeStandbyAfterIdle();
         if (!practiceDetail) {
           practiceDetail = true;
           clearLimit();
@@ -146,6 +171,7 @@ const PRACTICE_SETTINGS = {
         if (next < 0 || next >= PRACTICE_SETTINGS.startingSpeeds.length) showLimit(next < 0 ? 'MIN' : 'MAX');
         else renderValue();
       } else if (item.channel) {
+        resumeStandbyAfterIdle();
         const next = GameAudio.getVolume(item.channel) + delta;
         clearLimit();
         GameAudio.setVolume(item.channel, next);
@@ -158,14 +184,8 @@ const PRACTICE_SETTINGS = {
   window.GameMenu = {
     get current() { return MENU_ITEMS[current].id; },
     get practiceSpeed() { return speed(); },
-    prepareForGame: clearLimit,
-    returnToPracticeValue() {
-      clearLimit();
-      current = MENU_ITEMS.findIndex(item => item.id === 'practice');
-      practiceDetail = true;
-      renderFooter(MENU_ITEMS[current]);
-      renderValue();
-    }
+    prepareForGame: clearLimit
   };
   enter({ boot: true });
+  GameLights.standby();
 })();

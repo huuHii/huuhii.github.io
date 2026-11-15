@@ -38,7 +38,25 @@
     art.append(sprite(`${base}-backframe.png`, 'arrow-backframe'), cap,
       sprite(`${base}-frontframe.png`, 'arrow-frontframe'));
     button.append(art);
-    return lit => { art.dataset.lit = String(lit); };
+    let held = false;
+    let keepPressed = false;
+    return (lit, pressed) => {
+      art.dataset.lit = String(lit);
+      if (held === pressed) return;
+      held = pressed;
+      if (keepPressed) return;
+      cap.classList.toggle('is-pressed', pressed);
+      if (!pressed) return;
+
+      // Even a tap that ends before the next frame needs time to show the press.
+      keepPressed = true;
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          keepPressed = false;
+          cap.classList.toggle('is-pressed', held);
+        }, config.minPressMs);
+      });
+    };
   }
   function mountLegacy(button, color) {
     const base = `assets/${color}`;
@@ -80,8 +98,9 @@
   const arrows = preset === 'arrows-v1';
   pad.dataset.preset = preset;
   if (arrows) {
-    pad.style.setProperty('--arrow-press-distance', `${config.pressDistancePx}px`);
-    pad.style.setProperty('--arrow-transition', `${config.transitionMs}ms`);
+    pad.style.setProperty('--arrow-press-distance', `${config.pressDistancePercent}%`);
+    pad.style.setProperty('--arrow-press-duration', `${config.pressMs}ms`);
+    pad.style.setProperty('--arrow-release-duration', `${config.releaseMs}ms`);
     // Sepia gives the grayscale art a warm base hue to rotate from.
     const tint = config.frameHue === null ? '' : `sepia(1) saturate(${config.frameSaturation}) hue-rotate(${config.frameHue - 45}deg) `;
     pad.style.setProperty('--arrow-frame-filter', `${tint}brightness(${config.frameBrightness})`);
@@ -139,6 +158,7 @@
   window.addEventListener('blur', releaseAll);
   document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAll(); });
   window.GameButtons = {
+    get colorsInOrder() { return [...states.keys()]; },
     setLit(color, lit) { const state = states.get(color); if (state) { state.lit = lit; render(state); } },
     setMenuFeedback(enabled) { menuFeedback = enabled; states.forEach(render); },
     releaseAll
