@@ -4,7 +4,7 @@ const MenuCamera = (() => {
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
   const ease = t => (1 - Math.cos(Math.PI * t)) / 2;
   let position = positions.home;
-  let moving = false;
+  let transition;
 
   function place(element, view) {
     const { x, y } = positions[view];
@@ -14,37 +14,41 @@ const MenuCamera = (() => {
 
   function apply(next) {
     position = next;
-    world.style.transform = `translate(${-next.x * 100}%, ${-next.y * 100}%)`;
-    Platformer.invalidate();
+    // Keep the moving HUD in the CRT filter's paint layer.
+    world.style.left = `${-next.x * 100}%`;
+    world.style.top = `${-next.y * 100}%`;
   }
 
   function move(view, arrived) {
-    if (moving) return;
+    if (transition) return;
     const from = position;
     const to = positions[view];
     const duration = from.y === to.y ? MENU_TRANSITIONS.horizontalMs : MENU_TRANSITIONS.verticalMs;
     if (motion.matches || duration <= 0) {
       apply(to);
       arrived();
-      return;
+    } else {
+      transition = { from, to, duration, arrived, start: undefined };
     }
-    moving = true;
-    const start = performance.now();
-    function tick(now) {
-      const progress = Math.min(1, Math.max(0, (now - start) / duration));
-      if (progress === 1) {
-        apply(to);
-        moving = false;
-        arrived();
-      } else {
-        const t = ease(progress);
-        apply({ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t });
-        requestAnimationFrame(tick);
-      }
-    }
-    requestAnimationFrame(tick);
+    Platformer.invalidate();
   }
 
-  return { place, move, get moving() { return moving; }, get position() { return position; },
+  // Draw the canvas and move the HUD on the same frame.
+  function update(now) {
+    if (!transition) return;
+    transition.start ??= now;
+    const { from, to, duration, arrived, start } = transition;
+    const progress = (now - start) / duration;
+    if (progress >= 1 || motion.matches) {
+      apply(to);
+      transition = undefined;
+      arrived();
+    } else {
+      const t = ease(progress);
+      apply({ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t });
+    }
+  }
+
+  return { place, move, update, get moving() { return Boolean(transition); }, get position() { return position; },
     get reducedMotion() { return motion.matches; } };
 })();

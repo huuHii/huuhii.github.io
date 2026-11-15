@@ -30,7 +30,7 @@ const SCREEN_SEQUENCE_SETTINGS = {
     } else if (animation === 'scroll-stop') {
       if (stopped || x <= target) { x = target; stopped = true; }
     } else if (x <= -cycle) x = -((-x) % cycle);
-    track.style.transform = `translate3d(${x}px, -50%, 0)`;
+    track.style.left = `${x}px`;
     if (stopped && onComplete) {
       const complete = onComplete;
       onComplete = null;

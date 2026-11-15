@@ -1,6 +1,7 @@
 const CRT_SETTINGS = {
   enabled: true,
-  // CSS pixels. Positive speeds move down, negative speeds move up.
+  // Distances in pixels and speeds are measured at the artwork's 212px height.
+  // Positive speeds move down, negative speeds move up.
   scanlineGap: 2.8,
   scanlineThickness: 1.2,
   scanlineOpacity: 0.19,
@@ -34,6 +35,7 @@ const CrtEffect = (() => {
   display.append(scanlines, glass);
 
   const settings = { ...CRT_SETTINGS };
+  const referenceHeight = 212;
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
   const set = (name, value) => display.style.setProperty(`--crt-${name}`, value);
   const map = document.createElement('canvas');
@@ -42,6 +44,7 @@ const CrtEffect = (() => {
   let previousCurve = '';
 
   function updateCurvature({ width: screenWidth, height: screenHeight }) {
+    // SVG takes one displacement scale, so encode the per-axis strength in the map.
     const xStrength = screenWidth * clamp(settings.curvatureX, 0, 0.2);
     const yStrength = screenHeight * clamp(settings.curvatureY, 0, 0.2);
     const strength = Math.max(xStrength, yStrength);
@@ -86,12 +89,13 @@ const CrtEffect = (() => {
     set('curvature', 'url(#crt-curvature)');
   }
 
-  function updateRoll(height) {
+  function updateRoll(scale) {
     if (glass.hidden || roll.hidden) return;
+    const height = glass.getBoundingClientRect().height;
     if (!height) return;
     const band = height * clamp(settings.rollHeight, 0, 1);
     const down = settings.rollSpeed > 0;
-    const duration = (height + band) / Math.abs(settings.rollSpeed);
+    const duration = (height + band) / (Math.abs(settings.rollSpeed) * scale);
     set('roll-height', `${band}px`);
     set('roll-start', `${down ? -band : height}px`);
     set('roll-end', `${down ? height : -band}px`);
@@ -99,9 +103,27 @@ const CrtEffect = (() => {
     set('roll-delay', `${-duration / 2}s`);
   }
 
-  function updateGeometry() {
-    updateRoll(glass.getBoundingClientRect().height);
-    updateCurvature(display.getBoundingClientRect());
+  function updateScanlines(scale) {
+    if (scanlines.hidden) return;
+    const pitch = Math.max(2, settings.scanlineThickness + Math.max(0, settings.scanlineGap));
+    const scaledPitch = pitch * scale;
+    const thickness = settings.scanlineThickness * scale;
+    const center = `rgb(0 0 0 / ${clamp(settings.scanlineOpacity, 0, 1)})`;
+    set('pitch', `${scaledPitch}px`);
+    set('scanlines', `repeating-linear-gradient(to bottom, transparent 0, ${center} ${thickness / 2}px, transparent ${thickness}px, transparent ${scaledPitch}px)`);
+    scanlines.toggleAttribute('data-moving', settings.scanlineSpeed !== 0);
+    if (settings.scanlineSpeed) {
+      set('scanline-travel', `${Math.sign(settings.scanlineSpeed) * scaledPitch}px`);
+      set('scanline-duration', `${pitch / Math.abs(settings.scanlineSpeed)}s`);
+    }
+  }
+
+  function updateGeometry(rect) {
+    updateCurvature(rect);
+    if (rect.height <= 0) return;
+    const scale = rect.height / referenceHeight;
+    updateScanlines(scale);
+    updateRoll(scale);
   }
 
   function configure(changes = {}) {
@@ -110,31 +132,15 @@ const CrtEffect = (() => {
           (typeof value !== 'number' || Number.isFinite(value))) settings[name] = value;
     }
 
-    const thickness = Math.max(0, settings.scanlineThickness);
-    const gap = Math.max(0, settings.scanlineGap);
-    const pitch = Math.max(2, thickness + gap);
-    const opacity = clamp(settings.scanlineOpacity, 0, 1);
-    scanlines.hidden = !settings.enabled || !thickness || !opacity;
-    if (!scanlines.hidden) {
-      const center = `rgb(0 0 0 / ${opacity})`;
-      set('pitch', `${pitch}px`);
-      set('scanlines', `repeating-linear-gradient(to bottom, transparent 0, ${center} ${thickness / 2}px, transparent ${thickness}px, transparent ${pitch}px)`);
-      scanlines.toggleAttribute('data-moving', settings.scanlineSpeed !== 0);
-      if (settings.scanlineSpeed) {
-        set('scanline-travel', `${Math.sign(settings.scanlineSpeed) * pitch}px`);
-        set('scanline-duration', `${pitch / Math.abs(settings.scanlineSpeed)}s`);
-      }
-    }
-
+    scanlines.hidden = !settings.enabled || settings.scanlineThickness <= 0 || settings.scanlineOpacity <= 0;
     roll.hidden = !settings.rollSpeed || settings.rollHeight <= 0 || settings.rollOpacity <= 0;
     glass.hidden = !settings.enabled || (roll.hidden && settings.edgeShade <= 0);
     set('edge-shade', clamp(settings.edgeShade, 0, 1));
     set('roll-opacity', clamp(settings.rollOpacity, 0, 1));
-    updateGeometry();
+    updateGeometry(display.getBoundingClientRect());
   }
 
-  new ResizeObserver(([entry]) => updateCurvature(entry.contentRect)).observe(display);
-  new ResizeObserver(([entry]) => updateRoll(entry.contentRect.height)).observe(glass);
+  new ResizeObserver(([entry]) => updateGeometry(entry.contentRect)).observe(display);
   configure();
   return { configure };
 })();

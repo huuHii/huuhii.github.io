@@ -20,10 +20,13 @@ body { min-height:100dvh; overflow:hidden; background:linear-gradient(180deg,var
 .score-screen { --led-glow:color-mix(in srgb,var(--led-glow-color) calc(var(--led-glow-strength, 1) * 100%),transparent); position:absolute; aspect-ratio:538 / 212; overflow:visible; isolation:isolate; container-type:inline-size; filter:brightness(var(--screen-brightness)); -webkit-mask-image:url('assets/led-screen-new.png'); mask-image:url('assets/led-screen-new.png'); -webkit-mask-size:100% 100%; mask-size:100% 100%; -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; }
 .screen-art { position:absolute; inset:0; display:block; width:100%; height:100%; object-fit:fill; }
 .platformer-scene { position:absolute; inset:1.4% 1.2%; width:97.6%; height:97.2%; border-radius:2.5cqw; pointer-events:none; }
+.platformer-scene[hidden] { display:block; visibility:hidden; }
 .score-screen::after { content:""; position:absolute; z-index:1; inset:0; background:var(--screen-tint); opacity:var(--screen-tint-strength); mix-blend-mode:color; pointer-events:none; }
 .crt-scene, .crt-hud { position:absolute; inset:0; pointer-events:none; }
 .crt-scene:not(:has(canvas[hidden])), .crt-hud { filter:var(--crt-curvature, none); }
-.crt-hud { z-index:2; overflow:hidden; }
+.crt-hud { z-index:2; }
+/* Clip the camera's moving content before it reaches the stationary CRT filter. */
+.camera-menu-viewport { position:absolute; inset:0; overflow:hidden; }
 .camera-menu-world, .game-hud-position, .camera-panel { position:absolute; width:100%; height:100%; }
 .camera-menu-world { inset:0; }
 .game-hud-position { overflow:hidden; }
@@ -46,10 +49,7 @@ body { min-height:100dvh; overflow:hidden; background:linear-gradient(180deg,var
 .screen-message[data-animation] { position:relative; visibility:hidden; }
 .screen-message[data-typography="score"] { font-family:var(--led-score-font, 'DS-DIGIT', monospace); font-size:var(--led-score-font-size, 22cqw); }
 .screen-message[data-animation].is-animating { visibility:visible; }
-.scroll-loop-track { position:absolute; top:50%; left:0; display:flex; width:max-content; align-items:center; }
-@media (prefers-reduced-motion:no-preference) {
-  .screen-message[data-animation="scroll-loop"] .scroll-loop-track { will-change:transform; }
-}
+.scroll-loop-track { position:absolute; top:50%; left:0; transform:translateY(-50%); display:flex; width:max-content; align-items:center; }
 .scroll-loop-copy { display:block; flex:none; white-space:pre; }
 .screen-bottom-row { display:grid; grid-template-columns:1fr 1fr 1fr; align-items:center; gap:1cqw; min-width:0; font-family:var(--led-bottom-font, 'DS-DIGIT', monospace); font-size:var(--led-bottom-font-size, 6cqw); letter-spacing:var(--led-letter-spacing, .08em); }
 .screen-bottom-item { display:flex; align-items:center; gap:.25em; min-width:0; }

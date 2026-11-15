@@ -56,6 +56,7 @@
   }
   function panel(id, config) {
     const section = element('section', 'camera-panel');
+    section.hidden = true;
     section.dataset.menu = id;
     section.setAttribute('aria-label', config.title);
     section.setAttribute('aria-hidden', 'true');
@@ -121,20 +122,27 @@
     ], counter(settingsIndex, rows.length));
   }
 
-  function drawCharacters() {
-    const list = element('ul', 'character-menu-list');
-    for (const shift of [-1, 0, 1]) {
-      const runner = runners[(runnerIndex + shift + runners.length) % runners.length];
-      const row = element('li', 'camera-list-row', runner.name);
-      if (shift === 0) row.setAttribute('aria-current', 'true');
-      else row.setAttribute('aria-hidden', 'true');
-      list.append(row);
-    }
+  const characterList = element('ul', 'character-menu-list');
+  const characterRows = Array.from({ length: 3 }, (_, index) => {
+    const row = element('li', 'camera-list-row');
+    row.setAttribute(index === 1 ? 'aria-current' : 'aria-hidden', 'true');
+    characterList.append(row);
+    return row;
+  });
+  function buildCharacters() {
     const cycle = hint('up', 'BROWSE');
     cycle.append(arrow('down'));
-    drawPanel('characters', CHARACTERS_MENU, list, [
+    drawPanel('characters', CHARACTERS_MENU, characterList, [
       cycle, hint('right', 'SELECT & RETURN')
     ], counter(runnerIndex, runners.length));
+    return panels.get('characters').querySelector('.camera-counter');
+  }
+  const characterCounter = buildCharacters();
+  function drawCharacters() {
+    characterRows.forEach((row, index) => {
+      row.textContent = runners[(runnerIndex + index - 1 + runners.length) % runners.length].name;
+    });
+    characterCounter.textContent = counter(runnerIndex, runners.length);
   }
 
   function drawHighscores() {
@@ -223,6 +231,8 @@
   }
   function go(target) {
     cancelHold();
+    ScreenText.clear();
+    if (target === 'characters') Platformer.previewRunner(runners[runnerIndex]);
     if (target === 'practice') {
       Platformer.setPracticeTempo(GameRules.bpmAt(practiceSpeeds[practiceIndex]));
     } else if (view === 'practice') {
@@ -233,8 +243,8 @@
       draw(target);
     }
     MenuCamera.move(target, () => {
+      if (target !== 'characters') Platformer.hidePreview();
       view = target;
-      if (view !== 'home') ScreenText.clear();
       lockedUntil = performance.now() + MENU_TRANSITIONS.settleMs;
       selectPanel(view);
       if (view === 'home') enterHome();
@@ -390,5 +400,4 @@
     }
   };
   GameButtons.setInputGuard(blocksInput);
-  Platformer.previewRunner(runners[runnerIndex]);
 })();

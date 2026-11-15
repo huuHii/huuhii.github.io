@@ -67,7 +67,7 @@
     session++;
     clearTimeout(beatTimer);
     GameLights.cancel();
-    ScreenText.setVisible(true);
+    ScreenText.clear();
     GameAudio.stopTone();
     GameButtons.setMenuFeedback(true);
     banner.hidden = true;

@@ -23,9 +23,12 @@ const Platformer = (() => {
     sprites: config.files?.map(file => PlatformerSprites.load(file, invalidate)) ?? []
   });
   const cloudsConfig = BACKGROUND_ANIMATIONS.clouds;
+  // A small set of sizes lets every cloud glow fit in the sprite cache.
+  const cloudSizes = Array.from({ length: 8 }, (_, index) =>
+    cloudsConfig.size[0] + (cloudsConfig.size[1] - cloudsConfig.size[0]) * index / 7);
   const bumps = makeTrack(settings.bumps, settings.bumps.gap, .12, 1, () => ({}));
   const clouds = makeTrack(cloudsConfig, cloudsConfig.spawnGap, .18, 2, random => ({
-    size: randomBetween(cloudsConfig.size, random),
+    size: cloudSizes[Math.floor(random() * cloudSizes.length)],
     fromBottom: randomBetween(cloudsConfig.fromBottom, random)
   }));
   const particles = makeTrack(GROUND_PARTICLES, GROUND_PARTICLES.spawnGap, .025, 3, random =>
@@ -45,6 +48,15 @@ const Platformer = (() => {
   let cameraNudge = 0;
   let menuPlayer, runnerView, entranceAt, previewPlayer, previewSwap;
   let practiceTempo = 0;
+  const menuSprites = new Set([
+    ...CHARACTERS_MENU.options.map(runnerSprite), ...bumps.sprites, ...clouds.sprites
+  ]);
+  let warmSize;
+  let menuSpritesLoaded = false;
+  const ready = Promise.all([...menuSprites].map(sprite => sprite.ready)).then(() => {
+    menuSpritesLoaded = true;
+    resize();
+  });
 
   function resize() {
     const bounds = canvas.getBoundingClientRect();
@@ -58,6 +70,11 @@ const Platformer = (() => {
     context.setTransform(pixelWidth / width, 0, 0, pixelHeight / height, 0, 0);
     context.imageSmoothingEnabled = false;
     PlatformerSprites.setPixelRatio(ratio);
+    const size = [width, height, ratio].join('/');
+    if (menuSpritesLoaded && warmSize !== size) {
+      prepareMenuGlows();
+      warmSize = size;
+    }
     invalidate();
   }
   new ResizeObserver(resize).observe(canvas);
@@ -140,6 +157,38 @@ const Platformer = (() => {
   function spriteWidth(sprite, size) {
     return size * sprite.image.naturalWidth / sprite.image.naturalHeight;
   }
+  function groundPixel(py) {
+    return Math.max(1, Math.round(settings.groundLineWidth / py)) * py;
+  }
+  function bumpWidth(sprite, pixel, px) {
+    return Math.round(sprite.image.naturalWidth * pixel / px) * px;
+  }
+  function prepareMenuGlows() {
+    const px = width / canvas.width;
+    const py = height / canvas.height;
+    const pixel = groundPixel(py);
+    const runnerSize = layout.player.size * height;
+    for (const sprite of runnerSprites.values()) {
+      PlatformerSprites.prepare(sprite, spriteWidth(sprite, runnerSize), runnerSize);
+    }
+    for (const sprite of clouds.sprites) {
+      for (const fraction of cloudSizes) {
+        const size = fraction * height;
+        PlatformerSprites.prepare(sprite, spriteWidth(sprite, size), size);
+      }
+    }
+    for (const sprite of bumps.sprites) {
+      PlatformerSprites.prepare(sprite, bumpWidth(sprite, pixel, px), sprite.image.naturalHeight * pixel);
+    }
+    PlatformerSprites.prepareGroundGlow(pixel);
+    const { length, opacity, spawnChance, thickness } = GROUND_PARTICLES;
+    if (opacity > 0 && spawnChance > 0) {
+      const rows = Math.max(1, Math.round(thickness / py));
+      for (let columns = Math.max(1, Math.round(length[0] / px)); columns <= Math.round(length[1] / px); columns++) {
+        PlatformerSprites.prepareParticle(columns, rows);
+      }
+    }
+  }
   function randomBetween([min, max], random) {
     return min + (max - min) * random();
   }
@@ -212,17 +261,15 @@ const Platformer = (() => {
     const halfSpan = width / 2 * worldPixel;
     updateTrack(particles, distance - halfSpan - (length[1] + px) * worldPixel, distance + halfSpan);
 
-    const path = new Path2D();
     const bottom = canvas.height - rows;
+    context.globalAlpha = opacity;
     for (const { x, fraction, size } of particles.items) {
       const column = Math.round(projectX(x - distance, fraction * horizon) / px);
       if (column * px < -length[1] || column * px > width) continue;
       const row = Math.round(bottom - fraction * (bottom - top));
-      path.rect(column * px, row * py, Math.max(1, Math.round(size / px)) * px, rows * py);
+      const { texture, pad } = PlatformerSprites.prepareParticle(Math.max(1, Math.round(size / px)), rows);
+      context.drawImage(texture, (column - pad) * px, (row - pad) * py, texture.width * px, texture.height * py);
     }
-    context.fillStyle = GAME_THEME.ledColor;
-    context.globalAlpha = opacity;
-    PlatformerSprites.drawLit(context, () => context.fill(path), settings.outlineGlow.blur.slice(0, 1));
     context.globalAlpha = 1;
   }
   function drawGround(distance, beatDistance) {
@@ -247,9 +294,8 @@ const Platformer = (() => {
     // Align the line and the bottom row of each bump to the same backing pixels.
     const px = width / canvas.width;
     const py = height / canvas.height;
-    const pixel = Math.max(1, Math.round(settings.groundLineWidth / py)) * py;
+    const pixel = groundPixel(py);
     const y = Math.round((horizonY - pixel / 2) / py) * py;
-    const bumpWidth = item => Math.round(item.sprite.image.naturalWidth * pixel / px) * px;
     const halfSpan = width / (2 * height);
     updateTrack(bumps, distance - halfSpan - .5, distance + halfSpan);
     context.fillStyle = GAME_THEME.ledColor;
@@ -260,7 +306,7 @@ const Platformer = (() => {
     for (const bump of bumps.items) {
       if (!bump.sprite?.image.naturalWidth) continue;
       const x = Math.round(projectX(bump.x - distance, horizon) / px) * px;
-      const w = bumpWidth(bump);
+      const w = bumpWidth(bump.sprite, pixel, px);
       if (x >= width) break;
       if (x + w <= 0) continue;
       if (x > cursor) groundLine.rect(cursor, y, x - cursor, pixel);
@@ -298,7 +344,7 @@ const Platformer = (() => {
   }
   function drawPlayer(pose, player, x) {
     if (!player?.image.naturalWidth) return;
-    const size = layout.player.size * height * scaleAt(pose.fromBottom) / scaleAt(centerDepth);
+    const size = layout.player.size * height * (scaleAt(pose.fromBottom) / scaleAt(centerDepth));
     const w = spriteWidth(player, size);
     if (x + w < 0 || x - w > width) return;
     const y = projectY(pose.fromBottom + layout.player.fromBottom + pose.lift);
@@ -392,11 +438,14 @@ const Platformer = (() => {
     return poseAt(run.position, runnerDistance());
   }
   function invalidate() {
-    if (context && frame === null && !canvas.hidden && !document.hidden) frame = requestAnimationFrame(render);
+    if ((context || MenuCamera.moving) && frame === null && !canvas.hidden && !document.hidden) {
+      frame = requestAnimationFrame(render);
+    }
   }
   function render(now) {
     frame = null;
-    if (width && height) {
+    MenuCamera.update(now);
+    if (context && width && height) {
       advanceWorld(now);
       context.clearRect(0, 0, width, height);
       const camera = MenuCamera.position;
@@ -442,10 +491,7 @@ const Platformer = (() => {
   matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', invalidate);
   return {
     invalidate,
-    get ready() {
-      const sprites = [...runnerSprites.values(), ...bumps.sprites, ...clouds.sprites];
-      return Promise.all(sprites.map(sprite => sprite.ready));
-    },
+    ready,
     enterRunner(runner, view) {
       menuPlayer = runnerSprite(runner);
       runnerView = view;
@@ -465,8 +511,9 @@ const Platformer = (() => {
         { player: runnerSprite(previous), step, at: performance.now() } : undefined;
       invalidate();
     },
+    hidePreview() { previewPlayer = previewSwap = undefined; },
     setVisible(visible) {
-      if (!context || visible === !canvas.hidden) return;
+      if (visible === !canvas.hidden) return;
       canvas.hidden = !visible;
       if (visible) {
         if (!run) updatedAt = performance.now();

@@ -3,6 +3,8 @@ const PlatformerSprites = (() => {
   const maxCachedSizes = 12;
   let pixelRatio = 1;
   let groundGlow;
+  let particleGlowKey;
+  const particleTextures = new Map();
 
   function makeLayers(image) {
     const { naturalWidth: width, naturalHeight: height } = image;
@@ -65,7 +67,7 @@ const PlatformerSprites = (() => {
     paint();
   }
 
-  function drawGroundGlow(ctx, width, y, pixel) {
+  function prepareGroundGlow(pixel) {
     if (glow.opacity <= 0 || !glow.blur.length) return;
     const rows = Math.max(1, Math.round(pixel * pixelRatio));
     const key = [pixelRatio, rows, glow.opacity, GAME_THEME.ledGlowColor, ...glow.blur].join('/');
@@ -80,9 +82,36 @@ const PlatformerSprites = (() => {
       brush.clearRect(0, pad, texture.width, rows);
       groundGlow = { key, texture, pad };
     }
-    const { texture, pad } = groundGlow;
+    return groundGlow;
+  }
+
+  function drawGroundGlow(ctx, width, y, pixel) {
+    const prepared = prepareGroundGlow(pixel);
+    if (!prepared) return;
+    const { texture, pad } = prepared;
+    const rows = texture.height - pad * 2;
     const padding = pad * pixel / rows;
     ctx.drawImage(texture, pad, 0, 1, texture.height, 0, y - padding, width, pixel + padding * 2);
+  }
+
+  function prepareParticle(columns, rows) {
+    const blur = glow.blur[0];
+    const key = [pixelRatio, rows, blur, glow.opacity, GAME_THEME.ledColor, GAME_THEME.ledGlowColor].join('/');
+    if (particleGlowKey !== key) {
+      particleTextures.clear();
+      particleGlowKey = key;
+    }
+    if (particleTextures.has(columns)) return particleTextures.get(columns);
+    const pad = glow.opacity > 0 && glow.blur.length ? Math.ceil(blur * pixelRatio * 2) : 0;
+    const texture = document.createElement('canvas');
+    texture.width = columns + pad * 2;
+    texture.height = rows + pad * 2;
+    const brush = texture.getContext('2d');
+    brush.fillStyle = GAME_THEME.ledColor;
+    drawLit(brush, () => brush.fillRect(pad, pad, columns, rows), glow.blur.slice(0, 1));
+    const stamp = { texture, pad };
+    particleTextures.set(columns, stamp);
+    return stamp;
   }
 
   function cachedGlow(sprite, width, height) {
@@ -124,5 +153,10 @@ const PlatformerSprites = (() => {
     } else ctx.drawImage(highlights, x, y, width, height);
   }
 
-  return { load, draw, drawLit, drawGroundGlow, setPixelRatio(ratio) { pixelRatio = ratio; } };
+  function prepare(sprite, width, height) {
+    if (sprite.layers && glow.opacity > 0 && glow.blur.length) cachedGlow(sprite, width, height);
+  }
+
+  return { load, draw, drawLit, prepare, prepareGroundGlow, drawGroundGlow, prepareParticle,
+    setPixelRatio(ratio) { pixelRatio = ratio; } };
 })();
