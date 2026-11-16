@@ -22,6 +22,9 @@ body { min-height:100dvh; overflow:hidden; background:linear-gradient(180deg,var
 .platformer-scene { position:absolute; inset:1.4% 1.2%; width:97.6%; height:97.2%; border-radius:2.5cqw; pointer-events:none; }
 .platformer-scene[hidden] { display:block; visibility:hidden; }
 .score-screen::after { content:""; position:absolute; z-index:1; inset:0; background:var(--screen-tint); opacity:var(--screen-tint-strength); mix-blend-mode:color; pointer-events:none; }
+/* Avoid filtering and blending the whole animated display in the Home Screen app. */
+:root[data-standalone-display] .score-screen { filter:none; }
+:root[data-standalone-display] .score-screen::after { content:none; }
 .crt-scene, .crt-hud { position:absolute; inset:0; pointer-events:none; }
 .crt-scene:not(:has(canvas[hidden])), .crt-hud { filter:var(--crt-curvature, none); }
 .crt-hud { z-index:2; }
@@ -61,14 +64,12 @@ body { min-height:100dvh; overflow:hidden; background:linear-gradient(180deg,var
 }
 .screen-message[data-animation].is-animating { visibility:visible; }
 .scroll-loop-track { position:absolute; top:50%; left:var(--marquee-x, 0px); transform:translateY(-50%); display:flex; width:max-content; align-items:center; }
-/* Touch devices keep the CRT glass and scanlines without filtering every moving pixel. */
-@media (pointer:coarse) {
-  .crt-scene:not(:has(canvas[hidden])), .crt-hud { filter:none; }
-  .camera-menu-world { top:0; left:0; transform:translate(var(--camera-x, 0%), var(--camera-y, 0%)); }
-  .camera-menu-world[data-moving] { will-change:transform; }
-  .scroll-loop-track { left:0; transform:translate(var(--marquee-x, 0px), -50%); }
-  .screen-message.is-animating:not([data-animation="static"]) .scroll-loop-track { will-change:transform; }
-}
+/* Touch and standalone views keep the CRT glass and scanlines without distorting moving pixels. */
+:root[data-flat-crt] :is(.crt-scene:not(:has(canvas[hidden])), .crt-hud) { filter:none; }
+:root[data-flat-crt] .camera-menu-world { top:0; left:0; transform:translate(var(--camera-x, 0%), var(--camera-y, 0%)); }
+:root[data-flat-crt] .camera-menu-world[data-moving] { will-change:transform; }
+:root[data-flat-crt] .scroll-loop-track { left:0; transform:translate(var(--marquee-x, 0px), -50%); }
+:root[data-flat-crt] .screen-message.is-animating:not([data-animation="static"]) .scroll-loop-track { will-change:transform; }
 .scroll-loop-copy { display:block; flex:none; white-space:pre; }
 .screen-bottom-row { display:grid; grid-template-columns:1fr 1fr 1fr; align-items:center; gap:1cqw; min-width:0; font-family:var(--led-bottom-font, 'DS-DIGIT', monospace); font-size:var(--led-bottom-font-size, 6cqw); letter-spacing:var(--led-letter-spacing, .08em); }
 .screen-bottom-item { display:flex; align-items:center; gap:.25em; min-width:0; }
