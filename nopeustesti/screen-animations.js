@@ -1,12 +1,8 @@
 /* Speeds are percentages of the LED screen width per second. */
 const SCREEN_ANIMATIONS = {
   'scroll-loop': { speed: 57, gap: 30 },
-  'scroll-stop': { speed: 364 },
+  'scroll-stop': { speed: 200 },
   'static': { speed: 0 }
-};
-/* Hold time starts once the title has reached the center. */
-const SCREEN_SEQUENCE_SETTINGS = {
-  'title-loop': { holdSeconds: 1, welcomeHoldSeconds: 2, practiceHoldSeconds: 1 }
 };
 (() => {
   const display = document.querySelector('.score-screen');
@@ -15,7 +11,7 @@ const SCREEN_SEQUENCE_SETTINGS = {
   const track = document.createElement('span');
   track.className = 'scroll-loop-track';
   track.setAttribute('aria-hidden', 'true');
-  let copy, animation, settings;
+  let copy, animation, settings, speed;
   let screenWidth = 0, start = 0, cycle = 0, target = 0, travelled = 0;
   let frame = null, lastTick = null, stopped = false;
   let sequence = null;
@@ -51,8 +47,7 @@ const SCREEN_SEQUENCE_SETTINGS = {
       textWidth = copy.getBoundingClientRect().width;
     }
     const gap = screenWidth * (settings.gap || 0) / 100;
-    cycle = textWidth + gap;
-    if (!cycle) return;
+    cycle = textWidth + gap || 1;
     start = screenRect.right - messageRect.left + screenWidth * 0.1;
     target = (messageRect.width - textWidth) / 2;
     track.style.gap = `${gap}px`;
@@ -69,13 +64,14 @@ const SCREEN_SEQUENCE_SETTINGS = {
     symbol.setAttribute('aria-hidden', 'true');
     return symbol;
   }
-  function show(content, name = 'scroll-loop', { restart = true, icon = null, variant = 'main', onComplete: complete = null } = {}) {
-    sequence = null; // Switching views cancels any pending title/loop transition.
+  function show(content, name = 'scroll-loop', { restart = true, icon = null, variant = 'main', speed: entrySpeed, onComplete: complete = null } = {}) {
+    sequence = null; // Switching views cancels any pending sequence transition.
     onComplete = complete;
     if (!SCREEN_ANIMATIONS[name]) throw new Error(`Unknown screen animation: ${name}`);
     const changed = animation !== name;
     animation = name;
     settings = SCREEN_ANIMATIONS[name];
+    speed = entrySpeed ?? settings.speed;
     cycle = 0;
     if (restart || changed) { travelled = 0; lastTick = null; stopped = false; }
     message.classList.remove('is-animating');
@@ -95,10 +91,13 @@ const SCREEN_SEQUENCE_SETTINGS = {
     message.replaceChildren(track);
     measure();
   }
-  function titleLoop(title, loopText, { holdSeconds = SCREEN_SEQUENCE_SETTINGS['title-loop'].holdSeconds, onLoopStart = null } = {}) {
-    show(title, motion.matches ? 'static' : 'scroll-stop');
-    if (motion.matches && !onLoopStart) return;
-    sequence = { loopText, holdSeconds, elapsed: 0, onLoopStart };
+  function playSequence(steps, { repeatFrom = 0, onLoopStart = null } = {}) {
+    showStep({ steps, repeatFrom, onLoopStart, index: 0 });
+  }
+  function showStep(next) {
+    const { text, holdSeconds, variant, speed } = next.steps[next.index];
+    show(text, 'scroll-stop', { variant, speed });
+    sequence = { ...next, holdSeconds, elapsed: 0 };
     scheduleTick();
   }
   function clear() {
@@ -106,6 +105,7 @@ const SCREEN_SEQUENCE_SETTINGS = {
     frame = lastTick = copy = sequence = onComplete = null;
     cycle = 0;
     message.classList.remove('is-animating');
+    delete message.dataset.typography;
     message.removeAttribute('aria-label');
     message.replaceChildren();
   }
@@ -120,21 +120,24 @@ const SCREEN_SEQUENCE_SETTINGS = {
     lastTick = now;
     if (cycle && elapsed > 0) {
       if (!stopped) {
-        travelled += elapsed * settings.speed / 100;
+        travelled += elapsed * speed / 100;
         render();
       } else if (sequence) {
         sequence.elapsed += elapsed;
         if (sequence.elapsed >= sequence.holdSeconds) {
-          const nextText = sequence.loopText;
-          const callback = sequence.onLoopStart;
-          show(nextText, 'scroll-loop');
-          callback?.();
+          const next = sequence;
+          next.index = next.index + 1 < next.steps.length ? next.index + 1 : next.repeatFrom;
+          if (next.index === next.repeatFrom && next.onLoopStart) {
+            next.onLoopStart();
+            next.onLoopStart = null;
+          }
+          showStep(next);
         }
       }
     }
     scheduleTick();
   }
-  window.ScreenText = { show, titleLoop, clear, setVisible(visible) { message.style.opacity = visible ? '1' : '0'; } };
+  window.ScreenText = { show, playSequence, clear, setVisible(visible) { message.style.opacity = visible ? '1' : '0'; } };
   document.fonts.addEventListener('loadingdone', measure);
   new ResizeObserver(measure).observe(display);
   motion.addEventListener('change', () => {

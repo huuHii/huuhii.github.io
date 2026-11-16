@@ -34,6 +34,10 @@
               <div class="screen-ui" aria-live="polite">
                 <span class="practice-mode-label" hidden><span class="led-icon led-practice-start" aria-hidden="true"></span>PRACTICE MODE</span>
                 <span class="screen-message" data-animation="scroll-loop"></span>
+                <div class="lobby-controls" hidden>
+                  <div class="lobby-row lobby-top"></div>
+                  <div class="lobby-row lobby-bottom"></div>
+                </div>
                 <div class="screen-bottom-row"></div>
                 <div class="run-bar" aria-live="off" hidden></div>
                 <section class="run-results" aria-labelledby="run-results-title" hidden>
@@ -67,6 +71,7 @@
     <section class="button-pad" aria-label="Game buttons"></section>
   </main>
   <script src="layout.js"></script>
+  <script src="lobby-config.js"></script>
   <script src="screen-ui.js"></script>
   <script src="theme.js"></script>
   <script src="crt-effect.js"></script>

@@ -1,6 +1,6 @@
 const SETTINGS_MENU = {
   title: 'SETTINGS',
-  topPadding: '4cqw',
+  topPadding: 'var(--led-padding-top)',
   titleGap: '3cqw',
   titleFontSize: '4cqw',
   visibleRows: 4,

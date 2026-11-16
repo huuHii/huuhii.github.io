@@ -2,6 +2,7 @@
   const world = document.querySelector('.camera-menu-world');
   const hud = document.querySelector('.game-hud-position');
   const footer = hud.querySelector('.screen-bottom-row');
+  const lobbyControls = hud.querySelector('.lobby-controls');
   const runBar = hud.querySelector('.run-bar');
   const announcement = document.querySelector('.menu-announcement');
   const practiceSpeeds = PRACTICE_MENU.startingSpeeds;
@@ -23,7 +24,7 @@
   const menuHolds = {
     home: {
       right: {
-        label: 'HOLD TO PRACTICE',
+        label: LOBBY_UI.practiceHoldLabel,
         duration: PRACTICE_MENU.holdMs,
         tap: () => document.dispatchEvent(new CustomEvent('game-start-request')),
         hold: () => go('practice')
@@ -285,29 +286,45 @@
   }
 
   function drawHomeOptions() {
-    footer.dataset.view = 'standard';
-    const scores = hint('up', 'SCORES');
-    if (runBar.hidden) scores.append(icon('led-star'), element('span', '', number.format(GameRecords.highscore)));
-    scores.setAttribute('aria-label', `Up: highscores, best ${GameRecords.highscore}`);
-    footer.replaceChildren(hint('left', 'RUNNER'), scores, hint('down', 'SETTINGS'), hint('right', 'PLAY'));
+    const directions = { runner: 'left', scores: 'up', settings: 'down', play: 'right' };
+    for (const side of ['top', 'bottom']) {
+      const row = lobbyControls.querySelector(`.lobby-${side}`);
+      const { offset, gap, fontSize, columns, justify, items } = LOBBY_UI[side];
+      row.style.setProperty('--lobby-row-offset', offset);
+      Object.assign(row.style, { gap, fontSize, gridAutoColumns: columns, justifyContent: justify });
+      row.replaceChildren(...items.map(({ id, label, align }) => {
+        const node = id === 'highscore' ? element('span', 'camera-hint') : hint(directions[id], label);
+        if (id === 'highscore') {
+          const best = number.format(GameRecords.highscore);
+          node.append(icon('led-star'), element('span', '', label ? `${label} ${best}` : best));
+          node.setAttribute('aria-label', `${label || 'Highscore'} ${best}`);
+        }
+        node.style.justifySelf = align;
+        return node;
+      }));
+    }
+    footer.hidden = true;
+    lobbyControls.hidden = false;
   }
 
   function drawHome({ welcome = false } = {}) {
     MenuCamera.place(hud, 'home');
     hud.hidden = false;
-    footer.hidden = false;
-    const rightArrow = { icon: 'led-arrow led-arrow-right', label: 'right arrow' };
-    const instructions = ['PRESS ', rightArrow, ' TO START  /  HOLD ', rightArrow, ' FOR PRACTICE'];
+    const steps = [
+      { ...LOBBY_UI.modeTitle, variant: 'lobby-mode-title' },
+      { ...LOBBY_UI.pressToStart, variant: 'lobby-press-play' },
+      { ...LOBBY_UI.holdToPractice, variant: 'lobby-press-play' }
+    ];
     if (welcome) {
+      lobbyControls.hidden = true;
+      footer.hidden = false;
       footer.dataset.view = 'welcome';
-      footer.replaceChildren(element('span', 'app-version', 'v2 6.11.2026'));
-      ScreenText.titleLoop('WELCOME', instructions, {
-        holdSeconds: SCREEN_SEQUENCE_SETTINGS['title-loop'].welcomeHoldSeconds,
-        onLoopStart: drawHomeOptions
-      });
+      footer.replaceChildren(element('span', 'app-version', LOBBY_UI.version));
+      steps.unshift({ ...LOBBY_UI.welcome, variant: 'lobby-mode-title' });
+      ScreenText.playSequence(steps, { repeatFrom: 1, onLoopStart: drawHomeOptions });
     } else {
       drawHomeOptions();
-      ScreenText.titleLoop('STANDARD', instructions);
+      ScreenText.playSequence(steps);
     }
   }
 
@@ -328,6 +345,7 @@
     settingsPanel.querySelector('[data-show-description]')?.removeAttribute('data-show-description');
     settingsConfirmed = false;
     ScreenText.clear();
+    lobbyControls.hidden = true;
     runBar.hidden = true;
     if (target === 'characters') Platformer.previewRunner(runners[runnerIndex]);
     if (target === 'practice') {
@@ -373,7 +391,7 @@
   }
 
   function beginHold(direction, action) {
-    const container = view === 'home' ? footer : panels.get(view);
+    const container = view === 'home' ? lobbyControls : panels.get(view);
     const ring = container.querySelector(`.camera-arrow[data-arrow="${direction}"]`);
     const hint = ring?.closest('.camera-hint');
     const label = hint?.querySelector('.camera-hint-label');
@@ -534,6 +552,7 @@
     },
     prepareForGame(practice) {
       const target = practice ? 'practice' : 'home';
+      lobbyControls.hidden = true;
       runBar.hidden = practice;
       footer.hidden = !practice;
       MenuCamera.place(hud, target);

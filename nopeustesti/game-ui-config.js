@@ -7,7 +7,7 @@ const GAME_UI = {
     justifyContent: 'space-between',
     // Array order controls display order. Each item can override fontSize.
     items: [
-      { id: 'coins', label: 'COINS', value: 24 }
+      { id: 'coins', label: 'COINS', value: 24 },
       { id: 'lives', label: 'LIVES', value: 1 },
       { id: 'bpm', label: 'BPM', icon: 'led-metronome' },
       { id: 'time', label: 'TIME' },

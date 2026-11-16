@@ -48,6 +48,14 @@ body { min-height:100dvh; overflow:hidden; background:linear-gradient(180deg,var
 .screen-message { display:flex; min-width:0; align-items:center; justify-content:center; transform:translateY(var(--led-main-text-offset, 0cqw)); font-family:var(--led-main-font, 'DS-DIGIT', monospace); font-size:var(--led-main-font-size, 15cqw); letter-spacing:var(--led-letter-spacing, .08em); }
 .screen-message[data-animation] { position:relative; visibility:hidden; }
 .screen-message[data-typography="score"] { font-family:var(--led-score-font, 'DS-DIGIT', monospace); font-size:var(--led-score-font-size, 22cqw); }
+.screen-message[data-typography="lobby-mode-title"] {
+  font-family:var(--lobby-mode-title-font); font-size:var(--lobby-mode-title-size);
+  letter-spacing:var(--lobby-mode-title-spacing); transform:translateY(var(--lobby-mode-title-offset));
+}
+.screen-message[data-typography="lobby-press-play"] {
+  font-family:var(--lobby-press-play-font); font-size:var(--lobby-press-play-size);
+  letter-spacing:var(--lobby-press-play-spacing); transform:translateY(var(--lobby-press-play-offset));
+}
 .screen-message[data-animation].is-animating { visibility:visible; }
 .scroll-loop-track { position:absolute; top:50%; left:0; transform:translateY(-50%); display:flex; width:max-content; align-items:center; }
 .scroll-loop-copy { display:block; flex:none; white-space:pre; }
@@ -95,12 +103,15 @@ body { min-height:100dvh; overflow:hidden; background:linear-gradient(180deg,var
 .game-metric { display:flex; align-items:center; justify-content:center; gap:.25em; }
 .screen-bottom-row[data-view="practice-game"] { grid-template-columns:1fr; }
 .screen-bottom-row[data-view="practice-result"] > .screen-bottom-right { grid-column:3; }
-.screen-bottom-row[data-view="standard"] { grid-template-columns:.85fr 1.1fr 1fr auto; font-size:calc(.83 * var(--led-bottom-font-size)); }
-.screen-bottom-row[data-view="standard"] > :first-child { justify-self:start; }
-.screen-bottom-row[data-view="standard"] > :nth-child(2), .screen-bottom-row[data-view="standard"] > :nth-child(3) { justify-self:center; }
-.screen-bottom-row[data-view="standard"] > :last-child { justify-self:end; }
-.screen-ui:has(.screen-bottom-row:is([data-view="standard"], [data-view="welcome"]), .run-bar:not([hidden])) { grid-template-rows:minmax(0, 1fr) var(--led-bottom-font-size); }
-.screen-bottom-row:is([data-view="standard"], [data-view="welcome"]), .run-bar { position:absolute; top:0; inset-inline:0; }
+.lobby-controls { position:absolute; inset:0; }
+.lobby-row {
+  position:absolute; inset-inline:0; display:grid; grid-auto-flow:column; align-items:center;
+  font-family:var(--led-bottom-font); letter-spacing:var(--led-letter-spacing);
+}
+.lobby-top { top:var(--lobby-row-offset); }
+.lobby-bottom { bottom:var(--lobby-row-offset); }
+.screen-ui:has(.lobby-controls:not([hidden]), .screen-bottom-row[data-view="welcome"], .run-bar:not([hidden])) { grid-template-rows:minmax(0, 1fr) var(--led-bottom-font-size); }
+.screen-bottom-row[data-view="welcome"], .run-bar { position:absolute; top:0; inset-inline:0; }
 .screen-bottom-row[data-view="welcome"] { display:flex; justify-content:flex-end; }
 .screen-bottom-row[hidden] { display:none; }
 .app-version { font-size:.78em; opacity:.9; }
@@ -156,7 +167,7 @@ body { min-height:100dvh; overflow:hidden; background:linear-gradient(180deg,var
 .practice-mode-label[hidden] { display:none; }
 
 /* Menu panels occupy full screens in the same coordinate system as the canvas. */
-.camera-panel { display:grid; grid-template-rows:auto minmax(0,1fr) auto; align-content:stretch; gap:1cqw; padding:2.8cqw 6cqw 2.6cqw; color:var(--led-color); font-family:var(--led-bottom-font); font-size:3.5cqw; line-height:1; text-shadow:0 0 6px var(--led-glow-color); }
+.camera-panel { display:grid; grid-template-rows:auto minmax(0,1fr) auto; align-content:stretch; gap:1cqw; padding:var(--led-padding-top) var(--led-padding-x) var(--led-padding-bottom); color:var(--led-color); font-family:var(--led-bottom-font); font-size:3.5cqw; line-height:1; text-shadow:0 0 6px var(--led-glow-color); }
 .camera-panel-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:1cqw; }
 .camera-panel-heading h2 { margin:0; font:inherit; font-size:5.5cqw; letter-spacing:.05em; }
 .camera-caption { margin:0 0 .65cqw; font-size:2.05cqw; letter-spacing:.18em; opacity:.8; }
