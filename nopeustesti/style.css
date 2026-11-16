@@ -28,7 +28,10 @@ body { min-height:100dvh; overflow:hidden; background:linear-gradient(180deg,var
 /* Clip the camera's moving content before it reaches the stationary CRT filter. */
 .camera-menu-viewport { position:absolute; inset:0; overflow:hidden; }
 .camera-menu-world, .game-hud-position, .camera-panel { position:absolute; width:100%; height:100%; }
-.camera-menu-world { inset:0; }
+.camera-menu-world { top:var(--camera-y, 0%); left:var(--camera-x, 0%); }
+@property --camera-x { syntax:'<percentage>'; inherits:false; initial-value:0%; }
+@property --camera-y { syntax:'<percentage>'; inherits:false; initial-value:0%; }
+@property --marquee-x { syntax:'<length>'; inherits:false; initial-value:0px; }
 .game-hud-position { overflow:hidden; }
 .game-hud-position[hidden], .camera-panel[hidden] { display:none; }
 .crt-filter { position:absolute; pointer-events:none; }
@@ -57,7 +60,15 @@ body { min-height:100dvh; overflow:hidden; background:linear-gradient(180deg,var
   letter-spacing:var(--lobby-press-play-spacing); transform:translateY(var(--lobby-press-play-offset));
 }
 .screen-message[data-animation].is-animating { visibility:visible; }
-.scroll-loop-track { position:absolute; top:50%; left:0; transform:translateY(-50%); display:flex; width:max-content; align-items:center; }
+.scroll-loop-track { position:absolute; top:50%; left:var(--marquee-x, 0px); transform:translateY(-50%); display:flex; width:max-content; align-items:center; }
+/* Touch devices keep the CRT glass and scanlines without filtering every moving pixel. */
+@media (pointer:coarse) {
+  .crt-scene:not(:has(canvas[hidden])), .crt-hud { filter:none; }
+  .camera-menu-world { top:0; left:0; transform:translate(var(--camera-x, 0%), var(--camera-y, 0%)); }
+  .camera-menu-world[data-moving] { will-change:transform; }
+  .scroll-loop-track { left:0; transform:translate(var(--marquee-x, 0px), -50%); }
+  .screen-message.is-animating:not([data-animation="static"]) .scroll-loop-track { will-change:transform; }
+}
 .scroll-loop-copy { display:block; flex:none; white-space:pre; }
 .screen-bottom-row { display:grid; grid-template-columns:1fr 1fr 1fr; align-items:center; gap:1cqw; min-width:0; font-family:var(--led-bottom-font, 'DS-DIGIT', monospace); font-size:var(--led-bottom-font-size, 6cqw); letter-spacing:var(--led-letter-spacing, .08em); }
 .screen-bottom-item { display:flex; align-items:center; gap:.25em; min-width:0; }

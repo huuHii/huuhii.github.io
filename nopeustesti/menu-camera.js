@@ -14,9 +14,8 @@ const MenuCamera = (() => {
 
   function apply(next) {
     position = next;
-    // Keep the moving HUD in the CRT filter's paint layer.
-    world.style.left = `${-next.x * 100}%`;
-    world.style.top = `${-next.y * 100}%`;
+    world.style.setProperty('--camera-x', `${-next.x * 100}%`);
+    world.style.setProperty('--camera-y', `${-next.y * 100}%`);
   }
 
   function move(view, arrived) {
@@ -28,6 +27,7 @@ const MenuCamera = (() => {
       apply(to);
       arrived();
     } else {
+      world.setAttribute('data-moving', '');
       transition = { from, to, duration, arrived, start: undefined };
     }
     Platformer.invalidate();
@@ -41,6 +41,7 @@ const MenuCamera = (() => {
     const progress = (now - start) / duration;
     if (progress >= 1 || motion.matches) {
       apply(to);
+      world.removeAttribute('data-moving');
       transition = undefined;
       arrived();
     } else {

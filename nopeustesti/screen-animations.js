@@ -26,7 +26,7 @@ const SCREEN_ANIMATIONS = {
     } else if (animation === 'scroll-stop') {
       if (stopped || x <= target) { x = target; stopped = true; }
     } else if (x <= -cycle) x = -((-x) % cycle);
-    track.style.left = `${x}px`;
+    track.style.setProperty('--marquee-x', `${x}px`);
     if (stopped && onComplete) {
       const complete = onComplete;
       onComplete = null;

@@ -63,6 +63,7 @@
   function panel(id, config) {
     const section = element('section', 'camera-panel');
     section.hidden = true;
+    section.inert = true;
     section.dataset.menu = id;
     section.setAttribute('aria-label', config.title);
     section.setAttribute('aria-hidden', 'true');
@@ -100,13 +101,14 @@
     nav.append(...hints);
     target.replaceChildren(header, content, nav);
   }
-  function selectPanel(id) {
-    for (const [name, panel] of panels) {
-      panel.hidden = id !== name;
-      panel.setAttribute('aria-hidden', String(panel.hidden));
+  function selectPanel(active, incoming) {
+    function update(name, panel) {
+      panel.hidden = name !== active && name !== incoming;
+      panel.inert = name !== active || incoming !== undefined;
+      panel.setAttribute('aria-hidden', String(panel.inert));
     }
-    hud.hidden = id !== 'home';
-    hud.setAttribute('aria-hidden', String(id !== 'home'));
+    for (const [name, panel] of panels) update(name, panel);
+    update('home', hud);
   }
   const number = new Intl.NumberFormat();
   const average = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
@@ -303,67 +305,74 @@
         return node;
       }));
     }
+    delete footer.dataset.view;
     footer.hidden = true;
     lobbyControls.hidden = false;
   }
 
-  function drawHome({ welcome = false } = {}) {
+  function prepareHome({ welcome = false } = {}) {
     MenuCamera.place(hud, 'home');
-    hud.hidden = false;
+    runBar.hidden = true;
+    if (welcome) {
+      lobbyControls.hidden = true;
+      footer.hidden = false;
+      footer.dataset.view = 'welcome';
+      footer.replaceChildren(element('span', 'app-version', LOBBY_UI.version));
+    } else {
+      drawHomeOptions();
+    }
+  }
+
+  function playHomeSequence({ welcome = false } = {}) {
     const steps = [
       { ...LOBBY_UI.modeTitle, variant: 'lobby-mode-title' },
       { ...LOBBY_UI.pressToStart, variant: 'lobby-press-play' },
       { ...LOBBY_UI.holdToPractice, variant: 'lobby-press-play' }
     ];
     if (welcome) {
-      lobbyControls.hidden = true;
-      footer.hidden = false;
-      footer.dataset.view = 'welcome';
-      footer.replaceChildren(element('span', 'app-version', LOBBY_UI.version));
       steps.unshift({ ...LOBBY_UI.welcome, variant: 'lobby-mode-title' });
       ScreenText.playSequence(steps, { repeatFrom: 1, onLoopStart: drawHomeOptions });
     } else {
-      drawHomeOptions();
       ScreenText.playSequence(steps);
     }
   }
 
-  function draw(target) {
-    ({ home: drawHome, settings: drawSettings, characters: drawCharacters,
-      highscores: drawHighscores, statistics: drawStatistics, practice: drawPractice })[target]();
-  }
+  const draw = { home: prepareHome, settings: drawSettings, characters: drawCharacters,
+    highscores: drawHighscores, statistics: drawStatistics, practice: drawPractice };
   function blocksInput() {
     return startingUp || MenuCamera.moving || performance.now() < lockedUntil;
   }
   function enterHome(options) {
     Platformer.enterRunner(runners[runnerIndex], 'home');
-    drawHome(options);
+    prepareHome(options);
+    playHomeSequence(options);
   }
-  function go(target) {
+  function go(target, outgoing = view) {
     cancelHold();
     clearTimeout(settingsDescriptionTimer);
+    clearTimeout(settingsIndicatorTimer);
+    settingsPanel.removeAttribute('data-indicators-lit');
     settingsPanel.querySelector('[data-show-description]')?.removeAttribute('data-show-description');
     settingsConfirmed = false;
     ScreenText.clear();
-    lobbyControls.hidden = true;
-    runBar.hidden = true;
     if (target === 'characters') Platformer.previewRunner(runners[runnerIndex]);
     if (target === 'practice') {
       Platformer.setPracticeTempo(GameRules.bpmAt(practiceSpeeds[practiceIndex]));
     } else if (view === 'practice') {
       Platformer.setPracticeTempo(0);
     }
-    if (target !== 'home') {
-      panels.get(target).hidden = false;
-      draw(target);
-    }
+    draw[target]();
+    selectPanel(outgoing, target);
     MenuCamera.move(target, () => {
       if (target !== 'characters') Platformer.hidePreview();
       view = target;
       lockedUntil = performance.now() + MENU_TRANSITIONS.settleMs;
       selectPanel(view);
       if (view === 'settings') scheduleSettingsDescription();
-      if (view === 'home') enterHome();
+      if (view === 'home') {
+        Platformer.enterRunner(runners[runnerIndex], 'home');
+        playHomeSequence();
+      }
       else if (view === 'practice') Platformer.enterRunner(runners[runnerIndex], 'practice');
       else Platformer.hideRunner();
       announcement.textContent = view === 'home' ? 'RETURN' : panels.get(view).getAttribute('aria-label');
@@ -425,7 +434,7 @@
         startPractice();
       } else if (direction === 'left') {
         GameSession.leave();
-        go('home');
+        go('home', null); // The practice menu was already hidden by the run.
         GameLights.standby(standbyIdleSeconds);
       }
       return;
@@ -524,8 +533,6 @@
       runBar.hidden = true;
       if (view === 'home') enterHome();
       else {
-        hud.hidden = true;
-        panels.get('practice').hidden = false;
         Platformer.setPracticeTempo(GameRules.bpmAt(practiceSpeeds[practiceIndex]));
         drawPractice();
       }
@@ -548,7 +555,8 @@
       runBar.hidden = true;
       view = 'home';
       selectPanel(view);
-      drawHome();
+      prepareHome();
+      playHomeSequence();
     },
     prepareForGame(practice) {
       const target = practice ? 'practice' : 'home';
@@ -557,7 +565,10 @@
       footer.hidden = !practice;
       MenuCamera.place(hud, target);
       panels.get('practice').hidden = true;
+      panels.get('practice').inert = true;
+      panels.get('practice').setAttribute('aria-hidden', 'true');
       hud.hidden = false;
+      hud.inert = false;
       hud.removeAttribute('aria-hidden');
       if (practice) Platformer.setPracticeTempo(0);
     }
