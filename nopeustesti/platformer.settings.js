@@ -1,5 +1,12 @@
 const PLATFORMER_SETTINGS = {
   maxPixelRatio: 2,
+  startAcceleration: { maxSeconds: 0.3, maxBeatFraction: 0.45 },
+  obstacleFadeSeconds: 0.45, // linear fade starting at failure; 0 hides immediately
+  fallCamera: {
+    stopSeconds: 1.05,
+    minStopDistance: 0.7, // screen widths; faster runs can coast farther
+    speedMultiplier: 1 // scale the stopping distance calculated from the run tempo
+  },
   // Runner progress through the world. Catch-up speed is relative to the current tempo.
   playhead: { smoothingSeconds: 0.033, maxCatchUpSpeed: 1.8 },
   earlyPressNudge: {

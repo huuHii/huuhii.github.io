@@ -3,11 +3,6 @@
   const hud = document.querySelector('.game-hud-position');
   const footer = hud.querySelector('.screen-bottom-row');
   const runBar = hud.querySelector('.run-bar');
-  const results = hud.querySelector('.run-results');
-  const resultScore = results.querySelector('.run-results-score');
-  const resultAnimal = results.querySelector('.run-results-animal');
-  const resultsTrack = results.querySelector('.run-results-track');
-  const milestones = [...SPEED_MILESTONES].sort((a, b) => a.taps - b.taps);
   const announcement = document.querySelector('.menu-announcement');
   const practiceSpeeds = PRACTICE_MENU.startingSpeeds;
   const standbyIdleSeconds = 5;
@@ -18,6 +13,10 @@
   let lockedUntil = 0;
   let settingsIndex = 0;
   let settingsTop = 0;
+  let settingsIndicatorTimer;
+  let settingsDescriptionTimer;
+  let settingsConfirmed = false;
+  const settingsSelections = new Map();
   let practiceIndex = Math.max(0, practiceSpeeds.indexOf(PRACTICE_MENU.initialSpeed));
   let activeHold;
   let startingUp = true;
@@ -71,7 +70,14 @@
     panels.set(id, section);
     return section;
   }
-  panel('settings', SETTINGS_MENU);
+  const settingsPanel = panel('settings', SETTINGS_MENU);
+  settingsPanel.style.setProperty('--settings-top-padding', SETTINGS_MENU.topPadding);
+  settingsPanel.style.setProperty('--settings-title-gap', SETTINGS_MENU.titleGap);
+  settingsPanel.style.setProperty('--settings-title-font-size', SETTINGS_MENU.titleFontSize);
+  settingsPanel.style.setProperty('--settings-item-gap', SETTINGS_MENU.itemGap);
+  settingsPanel.style.setProperty('--settings-item-font-size', SETTINGS_MENU.itemFontSize);
+  settingsPanel.style.setProperty('--settings-indicator-blink', `${SETTINGS_MENU.indicatorBlinkMs}ms`);
+  settingsPanel.style.setProperty('--settings-description-scroll', `${SETTINGS_MENU.descriptionScrollMs}ms`);
   panel('characters', CHARACTERS_MENU);
   panel('highscores', HIGHSCORES_MENU);
   panel('statistics', STATISTICS_MENU);
@@ -81,10 +87,14 @@
     const target = panels.get(id);
     const header = element('header', 'camera-panel-heading');
     const label = element('div');
-    const captionClass = config.caption ? 'camera-caption' : 'camera-caption camera-counter';
-    label.append(element('p', captionClass, config.caption ?? counter), element('h2', '', config.title));
+    const counterAtEnd = id === 'settings' || config.caption;
+    if (id !== 'settings') {
+      const captionClass = config.caption ? 'camera-caption' : 'camera-caption camera-counter';
+      label.append(element('p', captionClass, config.caption ?? counter));
+    }
+    label.append(element('h2', '', config.title));
     header.append(label);
-    if (config.caption && counter) header.append(element('span', 'camera-caption camera-counter', counter));
+    if (counterAtEnd && counter) header.append(element('span', 'camera-caption camera-counter', counter));
     const nav = element('div', 'camera-panel-nav');
     nav.append(...hints);
     target.replaceChildren(header, content, nav);
@@ -102,32 +112,92 @@
   const date = new Intl.DateTimeFormat(undefined, HIGHSCORES_MENU.dateFormat);
   const counter = (index, total) => `${String(index + 1).padStart(2, '0')} / ${String(total).padStart(2, '0')}`;
 
+  function settingsValue(setting) {
+    if (setting.type === 'placeholder') return '—';
+    if (setting.type === 'toggle') return (settingsSelections.get(setting) ?? setting.defaultOn) ? 'ON' : 'OFF';
+    if (setting.type === 'choice') return setting.options[settingsSelections.get(setting) ?? 0];
+    if (setting.type === 'confirm') return settingsConfirmed ? 'UNLOCKS RESET' : 'HOLD TO CONFIRM';
+    return GameAudio.getVolume(setting.channel) || 'OFF';
+  }
+
+  function lightSettingsIndicators() {
+    clearTimeout(settingsIndicatorTimer);
+    settingsPanel.setAttribute('data-indicators-lit', '');
+    settingsIndicatorTimer = setTimeout(() => {
+      settingsPanel.removeAttribute('data-indicators-lit');
+    }, SETTINGS_MENU.indicatorLitMs);
+  }
+
+  function scheduleSettingsDescription() {
+    clearTimeout(settingsDescriptionTimer);
+    const description = settingsPanel.querySelector('.settings-description');
+    if (!description) return;
+    settingsDescriptionTimer = setTimeout(() => {
+      description.closest('.camera-list-row').setAttribute('data-show-description', '');
+    }, SETTINGS_MENU.descriptionDelayMs);
+  }
+
   function drawSettings() {
     const { rows, visibleRows } = SETTINGS_MENU;
     const list = element('ul', 'settings-menu-list');
-    list.style.setProperty('--settings-visible-rows', visibleRows);
+    list.toggleAttribute('data-can-scroll-up', settingsTop > 0);
+    list.toggleAttribute('data-can-scroll-down', settingsTop + visibleRows < rows.length);
     rows.slice(settingsTop, settingsTop + visibleRows).forEach((setting, offset) => {
       const selected = settingsIndex === settingsTop + offset;
       const row = element('li', 'camera-list-row');
       if (selected) row.setAttribute('aria-current', 'true');
-      const value = GameAudio.getVolume(setting.channel);
-      const meter = element('span', 'settings-meter');
-      meter.setAttribute('aria-hidden', 'true');
-      for (let i = 0; i < GAME_AUDIO.maxVolume; i++) {
-        meter.append(element('span', i < value ? 'is-filled' : ''));
+      const label = element('span', 'camera-row-label');
+      label.append(element('span', 'settings-row-name', setting.label));
+      row.append(label);
+      if (selected && setting.description) {
+        const description = element('span', 'settings-description');
+        const track = element('span', 'settings-description-track', setting.description);
+        track.addEventListener('animationend', () => {
+          if (!row.isConnected || !row.hasAttribute('data-show-description')) return;
+          row.removeAttribute('data-show-description');
+          scheduleSettingsDescription();
+        });
+        description.append(track);
+        label.append(description);
       }
-      row.append(element('span', 'camera-row-label', setting.label), meter,
-        element('span', 'camera-row-value', value || 'OFF'));
+      const value = settingsValue(setting);
+      if (setting.type === 'confirm') {
+        if (selected) {
+          const confirmation = hint('right', value);
+          confirmation.classList.add('settings-confirmation');
+          if (settingsConfirmed) {
+            const indicator = confirmation.lastElementChild;
+            delete indicator.dataset.arrow;
+            indicator.replaceChildren(icon('led-check'));
+          }
+          row.append(confirmation);
+        }
+      } else {
+        if (setting.channel) {
+          const meter = element('span', 'settings-meter');
+          meter.setAttribute('aria-hidden', 'true');
+          for (let i = 0; i < GAME_AUDIO.maxVolume; i++) {
+            meter.append(element('span', i < value ? 'is-filled' : ''));
+          }
+          row.append(meter);
+        }
+        row.append(element('span', 'camera-row-value', value));
+      }
       list.append(row);
     });
-    const adjust = hint('right', 'ADJUST');
-    adjust.prepend(arrow('left'));
-    const atTop = settingsIndex === 0;
-    const vertical = hint('down', atTop ? 'Down' : 'Up/Down');
-    const hints = [adjust, vertical];
-    if (atTop) hints.push(hint('up', 'RETURN'));
-    else vertical.append(arrow('up'));
+    const vertical = hint('down', settingsIndex === 0 ? 'NAVIGATE/RETURN' : 'NAVIGATE');
+    vertical.classList.add('settings-nav-navigate');
+    vertical.append(arrow('up'));
+    const hints = [vertical];
+    const selectedType = rows[settingsIndex].type;
+    if (selectedType !== 'confirm' && selectedType !== 'placeholder') {
+      const adjust = hint('right', 'ADJUST');
+      adjust.classList.add('settings-nav-adjust');
+      adjust.prepend(arrow('left'));
+      hints.unshift(adjust);
+    }
     drawPanel('settings', SETTINGS_MENU, list, hints, counter(settingsIndex, rows.length));
+    if (view === 'settings') scheduleSettingsDescription();
   }
 
   const characterList = element('ul', 'character-menu-list');
@@ -222,48 +292,23 @@
     footer.replaceChildren(hint('left', 'RUNNER'), scores, hint('down', 'SETTINGS'), hint('right', 'PLAY'));
   }
 
-  function drawHome({ result, welcome = false } = {}) {
+  function drawHome({ welcome = false } = {}) {
     MenuCamera.place(hud, 'home');
     hud.hidden = false;
     footer.hidden = false;
-    if (result) {
-      drawHomeOptions();
-      drawResults(result);
+    const rightArrow = { icon: 'led-arrow led-arrow-right', label: 'right arrow' };
+    const instructions = ['PRESS ', rightArrow, ' TO START  /  HOLD ', rightArrow, ' FOR PRACTICE'];
+    if (welcome) {
+      footer.dataset.view = 'welcome';
+      footer.replaceChildren(element('span', 'app-version', 'v2 6.11.2026'));
+      ScreenText.titleLoop('WELCOME', instructions, {
+        holdSeconds: SCREEN_SEQUENCE_SETTINGS['title-loop'].welcomeHoldSeconds,
+        onLoopStart: drawHomeOptions
+      });
     } else {
-      const rightArrow = { icon: 'led-arrow led-arrow-right', label: 'right arrow' };
-      const instructions = ['PRESS ', rightArrow, ' TO START  /  HOLD ', rightArrow, ' FOR PRACTICE'];
-      if (welcome) {
-        footer.dataset.view = 'welcome';
-        footer.replaceChildren(element('span', 'app-version', 'v2 6.11.2026'));
-        ScreenText.titleLoop('WELCOME', instructions, {
-          holdSeconds: SCREEN_SEQUENCE_SETTINGS['title-loop'].welcomeHoldSeconds,
-          onLoopStart: drawHomeOptions
-        });
-      } else {
-        drawHomeOptions();
-        ScreenText.titleLoop('STANDARD', instructions);
-      }
+      drawHomeOptions();
+      ScreenText.titleLoop('STANDARD', instructions);
     }
-  }
-
-  function drawResults({ score, speed, timeMs }) {
-    const reached = milestones.findLast(milestone => milestone.taps <= score);
-    const next = milestones.find(milestone => milestone.taps > score);
-    resultScore.textContent = number.format(score);
-    resultAnimal.textContent = reached ? `${reached.animal} speed reached` : 'No animal milestone reached';
-    const copy = element('div', 'run-results-copy');
-    copy.append(
-      element('span', '', `Total time: ${formatRunTime(timeMs)}`),
-      element('span', '', `Speed reached: ${speed} taps/min`),
-      element('span', '', next
-        ? `Taps away from next milestone: ${next.taps - score} (${next.animal})`
-        : 'All animal milestones reached')
-    );
-    const duplicate = copy.cloneNode(true);
-    duplicate.setAttribute('aria-hidden', 'true');
-    resultsTrack.replaceChildren(copy, duplicate);
-    ScreenText.clear();
-    results.hidden = false;
   }
 
   function draw(target) {
@@ -279,8 +324,10 @@
   }
   function go(target) {
     cancelHold();
+    clearTimeout(settingsDescriptionTimer);
+    settingsPanel.querySelector('[data-show-description]')?.removeAttribute('data-show-description');
+    settingsConfirmed = false;
     ScreenText.clear();
-    results.hidden = true;
     runBar.hidden = true;
     if (target === 'characters') Platformer.previewRunner(runners[runnerIndex]);
     if (target === 'practice') {
@@ -297,6 +344,7 @@
       view = target;
       lockedUntil = performance.now() + MENU_TRANSITIONS.settleMs;
       selectPanel(view);
+      if (view === 'settings') scheduleSettingsDescription();
       if (view === 'home') enterHome();
       else if (view === 'practice') Platformer.enterRunner(runners[runnerIndex], 'practice');
       else Platformer.hideRunner();
@@ -372,17 +420,44 @@
     } else if (view === 'settings') {
       const { rows, visibleRows } = SETTINGS_MENU;
       if (direction === 'up' && settingsIndex === 0) return go('home');
+      lightSettingsIndicators();
       if (direction === 'up' || direction === 'down') {
-        settingsIndex = Math.min(rows.length - 1, settingsIndex + (direction === 'up' ? -1 : 1));
+        const nextIndex = Math.min(rows.length - 1, settingsIndex + (direction === 'up' ? -1 : 1));
+        if (nextIndex !== settingsIndex) settingsConfirmed = false;
+        settingsIndex = nextIndex;
         settingsTop = Math.max(settingsIndex - visibleRows + 1, Math.min(settingsTop, settingsIndex));
       } else {
-        const { channel, preview } = rows[settingsIndex];
-        GameAudio.setVolume(channel, GameAudio.getVolume(channel) + (direction === 'right' ? 1 : -1));
-        if (preview) GameAudio.tone(color);
+        const setting = rows[settingsIndex];
+        if (setting.type === 'placeholder') return;
+        if (setting.type === 'confirm') {
+          if (direction === 'right' && !settingsConfirmed) {
+            beginHold(direction, {
+              duration: setting.holdMs,
+              hold: () => {
+                settingsConfirmed = true;
+                lightSettingsIndicators();
+                drawSettings();
+                announcement.textContent = settingsValue(setting);
+              }
+            });
+          }
+          return;
+        }
+        const step = direction === 'right' ? 1 : -1;
+        if (setting.type === 'toggle') {
+          settingsSelections.set(setting, direction === 'right');
+        } else if (setting.type === 'choice') {
+          const index = settingsSelections.get(setting) ?? 0;
+          const count = setting.options.length;
+          settingsSelections.set(setting, (index + step + count) % count);
+        } else {
+          GameAudio.setVolume(setting.channel, GameAudio.getVolume(setting.channel) + step);
+          if (setting.preview) GameAudio.tone(color);
+        }
       }
       drawSettings();
-      const { label, channel } = rows[settingsIndex];
-      announcement.textContent = `${label}: ${GameAudio.getVolume(channel) || 'off'}`;
+      const setting = rows[settingsIndex];
+      announcement.textContent = `${setting.label}: ${settingsValue(setting)}`;
     } else if (view === 'characters') {
       if (direction === 'right') {
         try { localStorage.setItem(characterKey, runners[runnerIndex].id); } catch {}
@@ -415,6 +490,10 @@
 
   window.GameMenu = {
     get current() { return view; },
+    get bpmIndicator() {
+      const setting = SETTINGS_MENU.rows.find(row => row.id === 'bpmIndicator');
+      return settingsSelections.get(setting) ?? setting?.defaultOn ?? false;
+    },
     get blocksInput() { return blocksInput(); },
     startupComplete() {
       startingUp = false;
@@ -435,20 +514,33 @@
       selectPanel(view);
       GameLights.standby();
     },
-    showRunResults(result) {
-      selectPanel('home');
-      enterHome({ result });
+    reenterRunner() {
+      if (view === 'home' || view === 'results' || view === 'practice') {
+        Platformer.enterRunner(runners[runnerIndex], view === 'practice' ? 'practice' : 'home');
+      }
+    },
+    showRunResults(result, onContinue) {
+      view = 'results';
+      footer.hidden = true;
+      ScreenText.clear();
+      ResultsScreen.show(result, onContinue);
+    },
+    returnFromResults() {
+      ResultsScreen.hide();
+      runBar.hidden = true;
+      view = 'home';
+      selectPanel(view);
+      drawHome();
     },
     prepareForGame(practice) {
       const target = practice ? 'practice' : 'home';
-      results.hidden = true;
       runBar.hidden = practice;
       footer.hidden = !practice;
       MenuCamera.place(hud, target);
       panels.get('practice').hidden = true;
       hud.hidden = false;
       hud.removeAttribute('aria-hidden');
-      if (practice) Platformer.setPracticeTempo(GameRules.bpmAt(practiceSpeeds[practiceIndex]));
+      if (practice) Platformer.setPracticeTempo(0);
     }
   };
   GameButtons.setInputGuard(blocksInput);

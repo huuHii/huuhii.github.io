@@ -40,6 +40,7 @@ const Platformer = (() => {
   const actions = [];
   let width = 0, height = 0, frame = null;
   let run = null;
+  let fall = null;
   let action = null;
   let updatedAt = performance.now();
   let groundDistance = 0;
@@ -81,7 +82,12 @@ const Platformer = (() => {
   window.addEventListener('resize', resize);
 
   function cuePosition(now) {
-    return run.beats + Math.min(1, Math.max(0, (now - run.startedAt) / run.beatMs));
+    const fraction = Math.min(1, Math.max(0, (now - run.startedAt) / run.beatMs));
+    if (run.beats === 1 && fraction < run.rampBeats) {
+      // With linear acceleration, travel grows with the square of elapsed time.
+      return 1 + (run.rampBeats + fraction ** 2 / run.rampBeats) / 2;
+    }
+    return run.beats + fraction;
   }
   function actionBeat(cueBeat) {
     return cueBeat + 1;
@@ -100,7 +106,10 @@ const Platformer = (() => {
     const elapsed = (now - updatedAt) / 1000;
     const nudge = settings.earlyPressNudge;
     let targetNudge = 0;
-    if (run) {
+    if (fall) {
+      const t = fall.stopMs > 0 ? Math.min(1, (now - fall.startedAt) / fall.stopMs) : 1;
+      groundDistance = fall.startDistance + fall.travel * (1 - (1 - t) ** 2);
+    } else if (run) {
       const { smoothingSeconds, maxCatchUpSpeed } = settings.playhead;
       const blend = smoothingSeconds > 0 ? -Math.expm1(-elapsed / smoothingSeconds) : 1;
       // Track the cue clock at normal pace and ease only the extra travel after a wait.
@@ -116,6 +125,9 @@ const Platformer = (() => {
       const strength = run.confirmedCue === run.beats ? run.earlyPress :
         Math.min(run.earlyPress, earlyPressStrength(run.beats, cue));
       targetNudge = nudge.maxRight * strength;
+      if (run.beats === 1 && run.rampBeats > 0) {
+        targetNudge *= Math.min(1, (now - run.startedAt) / (run.beatMs * run.rampBeats));
+      }
     } else if (!MenuCamera.reducedMotion) {
       const { x, y } = MenuCamera.position;
       if (practiceTempo) {
@@ -437,6 +449,16 @@ const Platformer = (() => {
     }
     return poseAt(run.position, runnerDistance());
   }
+  function endRun() {
+    if (!run) return;
+    advanceWorld(performance.now());
+    run = fall = null;
+    cameraNudge = 0;
+    action = null;
+    actions.length = 0;
+    obstacles.length = 0;
+    invalidate();
+  }
   function invalidate() {
     if ((context || MenuCamera.moving) && frame === null && !canvas.hidden && !document.hidden) {
       frame = requestAnimationFrame(render);
@@ -459,21 +481,29 @@ const Platformer = (() => {
         drawGroundParticles(distance);
         drawGround(distance, run ? gameDistance : distance);
         if (run) {
-          const pose = updatePlayer();
+          const fallSeconds = fall ? Math.max(0, now - fall.startedAt) / 1000 : 0;
+          const obstacleOpacity = fall && settings.obstacleFadeSeconds > 0 ?
+            Math.max(0, 1 - fallSeconds / settings.obstacleFadeSeconds) : fall ? 0 : 1;
+          const pose = fall ? PlayerAnimations.fallPose(fall.pose, fallSeconds) :
+            updatePlayer();
           const runner = runnerDistance();
           const left = gameDistance - width / (2 * height);
           // An obstacle can leave the camera before the runner reaches it.
           const discardBefore = Math.min(left, runner - layout.beatSpacing);
           while (obstacles.length && obstacleX(obstacles[0]) + obstacleSize(obstacles[0]) < discardBefore) obstacles.shift();
+          context.globalAlpha = obstacleOpacity;
           for (const obstacle of obstacles) {
             if (obstacle.depth >= pose.fromBottom) drawObstacle(obstacle, gameDistance);
           }
           const scroll = (runner - gameDistance) * height * scaleAt(centerDepth);
           const stride = PlayerAnimations.runOffset(runner - beatOrigin) * height * pose.stride;
-          drawPlayer(pose, menuPlayer, pose.x * width + scroll + stride);
+          context.globalAlpha = 1;
+          if (pose.visible !== false) drawPlayer(pose, menuPlayer, pose.x * width + scroll + stride);
+          context.globalAlpha = obstacleOpacity;
           for (const obstacle of obstacles) {
             if (obstacle.depth < pose.fromBottom) drawObstacle(obstacle, gameDistance);
           }
+          context.globalAlpha = 1;
         } else {
           drawMenuRunners(now, camera.x);
         }
@@ -527,9 +557,15 @@ const Platformer = (() => {
       advanceWorld(startedAt);
       entranceAt = undefined;
       practiceTempo = 0;
-      beatOrigin = groundDistance;
+      const beatMs = nextBeat - startedAt;
+      const { maxSeconds, maxBeatFraction } = settings.startAcceleration;
+      const rampBeats = Math.min(maxBeatFraction, maxSeconds * 1000 / beatMs);
+      // The ramp covers half the distance of full-speed travel over the same time.
+      // Shift the beatlines and obstacles by that shortfall while keeping the ground continuous.
+      const position = 1 + rampBeats / 2;
+      beatOrigin = groundDistance - position * layout.beatSpacing;
       cameraNudge = 0;
-      run = { beats: 0, startedAt, beatMs: nextBeat - startedAt, cue: 0, position: 0, confirmedCue: 0, earlyPress: 0 };
+      run = { beats: 1, startedAt, beatMs, rampBeats, cue: position, position, confirmedCue: 0, earlyPress: 0 };
       invalidate();
     },
     planBeat(beat, color) {
@@ -547,16 +583,26 @@ const Platformer = (() => {
       run.beatMs = nextBeat - scheduledAt;
       advanceWorld(performance.now());
     },
-    endRun() {
-      if (!run) return;
-      advanceWorld(performance.now());
-      run = null;
+    trip() {
+      if (!run || MenuCamera.reducedMotion || document.hidden) {
+        endRun();
+        return 0;
+      }
+      const startedAt = performance.now();
+      advanceWorld(startedAt);
+      const pose = updatePlayer();
+      const { stopSeconds, minStopDistance, speedMultiplier } = settings.fallCamera;
+      const cameraScale = height ? width / (height * scaleAt(centerDepth)) : 0;
+      const speed = layout.beatSpacing * 1000 / run.beatMs;
+      const travel = Math.max(minStopDistance * cameraScale, speed * speedMultiplier * stopSeconds / 2);
+      // Keep the camera's starting position when handing off from the early-press nudge.
+      groundDistance -= cameraNudge * cameraScale;
       cameraNudge = 0;
-      action = null;
-      actions.length = 0;
-      obstacles.length = 0;
+      fall = { startedAt, pose, startDistance: groundDistance, travel, stopMs: stopSeconds * 1000 };
       invalidate();
+      return Math.max(stopSeconds, playerSettings.fall.durationSeconds, settings.obstacleFadeSeconds) * 1000;
     },
+    endRun,
     act(color, cueBeat) {
       if (!run) return;
       const now = performance.now();

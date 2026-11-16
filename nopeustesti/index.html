@@ -35,21 +35,20 @@
                 <span class="practice-mode-label" hidden><span class="led-icon led-practice-start" aria-hidden="true"></span>PRACTICE MODE</span>
                 <span class="screen-message" data-animation="scroll-loop"></span>
                 <div class="screen-bottom-row"></div>
-                <div class="run-bar" aria-live="off" hidden>
-                  <span class="game-metric run-tempo"><span class="led-icon led-metronome" aria-hidden="true"></span><span></span></span>
-                  <span class="game-metric run-best"><span class="led-icon led-star" aria-hidden="true"></span><span></span></span>
-                  <span class="run-time">TIME 0:00</span>
-                  <span>LIVES 1</span>
-                  <span>COINS 24</span>
-                </div>
+                <div class="run-bar" aria-live="off" hidden></div>
                 <section class="run-results" aria-labelledby="run-results-title" hidden>
                   <header class="run-results-summary">
-                    <h2 id="run-results-title">Speed Test Results</h2>
-                    <p class="run-results-score"></p>
-                    <p class="run-results-animal"></p>
+                    <div class="run-results-metrics">
+                      <h2 id="run-results-title">SPEEDTEST RESULTS</h2>
+                      <p class="run-results-score" aria-live="off"></p>
+                      <p class="run-results-animal"></p>
+                    </div>
                   </header>
-                  <div class="run-results-ticker">
-                    <div class="run-results-track"></div>
+                  <div class="run-results-footer">
+                    <div class="run-results-ticker">
+                      <div class="run-results-track"></div>
+                    </div>
+                    <button class="run-results-continue" type="button">CONTINUE<span class="led-icon led-arrow" aria-hidden="true"></span></button>
                   </div>
                 </section>
               </div>
@@ -77,6 +76,7 @@
   <script src="buttons.js"></script>
   <script src="menu-transitions.js"></script>
   <script src="settings-config.js"></script>
+  <script src="game-ui-config.js"></script>
   <script src="characters-config.js"></script>
   <script src="highscores-config.js"></script>
   <script src="statistics-config.js"></script>
@@ -84,6 +84,7 @@
   <script src="menu-camera.js"></script>
   <script src="game-rules.js"></script>
   <script src="milestones-config.js"></script>
+  <script src="results-screen.js"></script>
   <script src="game-records.js"></script>
   <script src="platformer-layout.js"></script>
   <script src="platformer.settings.js"></script>

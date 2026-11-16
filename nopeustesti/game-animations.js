@@ -1,6 +1,6 @@
-/* Button light sequences. Times are in seconds. */
+/* Countdown and button light timings are in seconds. */
+const GAME_COUNTDOWN = { holdSeconds: 0.75 };
 const GAME_LIGHT_ANIMATIONS = {
-  ready: { durationSeconds: 1 },
   gameOver: { flashes: 3, intervalSeconds: 0.22 },
   standby: {
     stepSeconds: 0.55,
@@ -44,9 +44,9 @@ const GAME_LIGHT_ANIMATIONS = {
       }
       standbyTimer = setTimeout(lightNext, Math.max(stepMs, delaySeconds * 1000));
     },
-    ready(done) {
+    ready(durationSeconds, done) {
       cancel();
-      const ms = GAME_LIGHT_ANIMATIONS.ready.durationSeconds * 1000;
+      const ms = durationSeconds * 1000;
       colors.forEach((color, i) => after(ms * i / colors.length, () => GameButtons.setLit(color, true)));
       after(ms, () => { all(false); done(); });
     },

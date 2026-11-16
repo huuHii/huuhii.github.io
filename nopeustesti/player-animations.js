@@ -1,6 +1,12 @@
 const PLAYER_ANIMATION_SETTINGS = {
   stride: { stepsPerBeat: 2, sway: 0.004 }, // sway is a fraction of display height
   clearance: 0.025, // extra space before returning, in display heights
+  fall: {
+    durationSeconds: 0.65,
+    blinkIntervalSeconds: 0.1, // time between switching visible and invisible; 0 disables blinking
+    rotationDegrees: 470, // clockwise
+    jumpHeight: 0.075 // fraction of display height
+  },
   // Times are in beats. The pose holds until both the minimum and obstacle clearance are met.
   // Lane offsets are fractions of display width; jump height is a fraction of display height.
   actions: {
@@ -66,5 +72,19 @@ const PlayerAnimations = (() => {
     return sway * Math.sin(steps * Math.PI);
   }
 
-  return { rest, start, playerPose, runOffset };
+  function fallPose(from, elapsedSeconds) {
+    const { durationSeconds, blinkIntervalSeconds, rotationDegrees, jumpHeight } = settings.fall;
+    const t = clamp(phase(elapsedSeconds, durationSeconds));
+    const rotation = rotationDegrees * Math.PI / 180;
+    return {
+      ...from,
+      fromBottom: from.fromBottom + (rest.fromBottom - from.fromBottom) * t,
+      lift: from.lift * (1 - t) + jumpHeight * 4 * t * (1 - t),
+      roll: from.roll + rotation * ease(t),
+      heightScale: from.heightScale + (1 - from.heightScale) * t,
+      visible: blinkIntervalSeconds <= 0 || Math.floor(elapsedSeconds / blinkIntervalSeconds) % 2 === 0
+    };
+  }
+
+  return { rest, start, playerPose, runOffset, fallPose };
 })();

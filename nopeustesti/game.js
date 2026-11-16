@@ -1,15 +1,23 @@
-/* Gameplay controls the lights from READY through the result screen. */
+/* Gameplay controls the countdown, cues, and result screen. */
 (() => {
   const colors = ['red', 'yellow', 'blue', 'green'];
   const footer = document.querySelector('.screen-bottom-row');
   const banner = document.querySelector('.practice-mode-label');
-  const tempoDisplay = document.querySelector('.run-tempo');
-  const bestDisplay = document.querySelector('.run-best');
-  const timeDisplay = document.querySelector('.run-time');
+  const runBar = document.querySelector('.run-bar');
+  const barItems = new Map();
+  const { topBar } = GAME_UI;
+  for (const [name, value] of Object.entries({
+    'top-padding': topBar.topPadding,
+    'horizontal-padding': topBar.horizontalPadding,
+    'font-size': topBar.fontSize,
+    gap: topBar.gap,
+    justify: topBar.justifyContent
+  })) runBar.style.setProperty('--game-bar-' + name, value);
   let phase = 'idle', practice = false, score = 0, bpm = 0;
   let startingScore = 0, beats = 0, queue = [], lastColor = null;
   const plannedColors = [];
   let beatTimer = null, clockTimer = null, session = 0, nextBeat = 0;
+  let recoveryTimer = null;
   let runStartedAt = 0, taps = 0, cueAudio = false;
   let practiceTempo;
   function element(className, value) {
@@ -28,16 +36,36 @@
     group.append(icon(symbol), element('', value));
     return group;
   }
+  function prepareRunBar() {
+    barItems.clear();
+    runBar.replaceChildren();
+    for (const item of topBar.items) {
+      if (item.id === 'bpm' && !GameMenu.bpmIndicator) continue;
+      const node = element('game-metric');
+      const text = element('');
+      if (item.fontSize) node.style.fontSize = item.fontSize;
+      if (item.icon) node.append(icon(item.icon));
+      node.append(text);
+      runBar.append(node);
+      barItems.set(item.id, { text, label: item.label });
+      renderBarItem(item.id, item.value ?? '');
+    }
+  }
+  function renderBarItem(id, value) {
+    const item = barItems.get(id);
+    if (!item) return;
+    const text = [item.label, value].filter(part => part !== '' && part != null).join(' ');
+    if (item.text.textContent !== text) item.text.textContent = text;
+  }
   function renderFooter(result = false) {
     const tempo = Math.round(bpm);
     if (!practice) {
-      updateMetric(tempoDisplay, 'BPM', tempo);
-      updateMetric(bestDisplay, 'Highscore', Math.max(GameRecords.highscore, score));
+      renderBarItem('bpm', tempo);
       return;
     }
     const view = result ? 'practice-result' : 'practice-game';
-    if (practiceTempo && footer.dataset.view === view) {
-      updateMetric(practiceTempo, 'BPM', tempo);
+    if (footer.dataset.view === view) {
+      if (practiceTempo) updateMetric(practiceTempo, 'BPM', tempo);
       return;
     }
     const nodes = [];
@@ -46,9 +74,11 @@
       menu.append(icon('led-arrow led-arrow-left'), element('', 'RETURN'));
       nodes.push(menu);
     }
-    practiceTempo = metric('led-metronome', tempo);
-    updateMetric(practiceTempo, 'BPM', tempo);
-    nodes.push(practiceTempo);
+    practiceTempo = GameMenu.bpmIndicator ? metric('led-metronome', tempo) : null;
+    if (practiceTempo) {
+      updateMetric(practiceTempo, 'BPM', tempo);
+      nodes.push(practiceTempo);
+    }
     if (result) {
       const replay = element('screen-bottom-item screen-bottom-right');
       replay.append(element('', 'RETRY'), icon('led-arrow'));
@@ -64,8 +94,7 @@
     if (node.getAttribute('aria-label') !== name) node.setAttribute('aria-label', name);
   }
   function renderTime(timeMs) {
-    const text = `TIME ${formatRunTime(timeMs)}`;
-    if (timeDisplay.textContent !== text) timeDisplay.textContent = text;
+    renderBarItem('time', formatRunTime(timeMs));
   }
   function tickClock() {
     const elapsed = performance.now() - runStartedAt;
@@ -83,33 +112,57 @@
     banner.hidden = true;
     phase = 'idle';
     queue = [];
+    if (recoveryTimer !== null) recoverRunner();
+    else Platformer.endRun();
+  }
+  function recoverRunner() {
+    clearTimeout(recoveryTimer);
+    recoveryTimer = null;
     Platformer.endRun();
+    GameMenu.reenterRunner();
   }
   function finish() {
     if (phase !== 'playing') return;
-    const timeMs = performance.now() - runStartedAt;
+    const failedAt = performance.now();
+    const timeMs = failedAt - runStartedAt;
     phase = 'ending';
     clearTimeout(beatTimer);
     clearTimeout(clockTimer);
-    Platformer.endRun();
+    const tripMs = Platformer.trip();
     GameAudio.stopTone();
-    if (practice) {
-      renderFooter(true);
-    } else {
+    if (!practice) {
       renderTime(timeMs);
       GameRecords.saveRun({ score, taps, timeMs });
     }
-    ScreenText.show(String(score), 'static', { variant: 'score' });
+    ScreenText.clear();
     if (cueAudio) GameAudio.gameOver();
-    const token = session;
-    GameLights.gameOver(() => {
-      if (session !== token) return;
-      ScreenText.setVisible(true);
-      phase = practice ? 'practice-result' : 'idle';
-      if (!practice) GameMenu.showRunResults({ score, speed: Math.round(bpm), timeMs });
-      GameButtons.setMenuFeedback(true);
-      GameLights.standby();
-    }, lit => { if (session === token) ScreenText.setVisible(lit); });
+    const revealMs = RESULTS_SCREEN.failureDelaySeconds * 1000;
+    if (practice) {
+      GameLights.gameOver(() => {
+        beatTimer = setTimeout(() => {
+          recoverRunner();
+          GameButtons.setMenuFeedback(true);
+          phase = 'practice-result';
+          ScreenText.show(String(score), 'static', { variant: 'score' });
+          renderFooter(true);
+          GameLights.standby();
+        }, Math.max(0, failedAt + tripMs - performance.now()));
+      });
+    } else {
+      GameLights.gameOver(() => {});
+      beatTimer = setTimeout(() => {
+        GameButtons.setMenuFeedback(true);
+        phase = 'result';
+        GameMenu.showRunResults({ score, speed: Math.round(bpm), timeMs }, continueToLobby);
+      }, revealMs);
+      recoveryTimer = setTimeout(recoverRunner, Math.max(tripMs, revealMs));
+    }
+  }
+  function continueToLobby() {
+    if (phase !== 'result') return;
+    phase = 'idle';
+    GameMenu.returnFromResults();
+    GameLights.standby();
   }
   function planColors(count) {
     while (plannedColors.length < count) {
@@ -127,6 +180,15 @@
     // maxLateBeeps excludes the current beep: 0 requires clearing each before the next.
     if (queue.length > GAME_RULES.maxLateBeeps) { finish(); return; }
     bpm = GameRules.bpmAt(startingScore + beats);
+    const scheduledBeat = nextBeat;
+    nextBeat += 60000 / GameRules.bpmAt(startingScore + beats + 1);
+    if (!beats) {
+      Platformer.startRun(scheduledBeat, nextBeat);
+      ScreenText.show('GO!', 'static');
+      if (!practice) tickClock();
+    } else {
+      Platformer.beat(scheduledBeat, nextBeat);
+    }
     planColors(1);
     const color = plannedColors.shift();
     GameLights.all(false);
@@ -135,9 +197,6 @@
     if (cueAudio) GameAudio.tone(color);
     beats++;
     renderFooter();
-    const scheduledBeat = nextBeat;
-    nextBeat += 60000 / GameRules.bpmAt(startingScore + beats);
-    Platformer.beat(scheduledBeat, nextBeat);
     planObstacleCues();
     beatTimer = setTimeout(() => {
       // Avoid a burst of missed beats after a stalled/hidden browser.
@@ -159,41 +218,45 @@
     plannedColors.length = 0;
     bpm = GameRules.bpmAt(startingScore);
     phase = 'ready';
-    if (!practice) renderTime(0);
+    if (!practice) {
+      prepareRunBar();
+      renderTime(0);
+    }
     banner.hidden = !practice;
     GameButtons.setMenuFeedback(false);
     renderFooter();
     const token = session;
-    let textDone = false, lightsDone = false, audioDone = false;
-    function begin() {
-      if (session !== token || phase !== 'ready' || !textDone || !lightsDone || !audioDone) return;
-      phase = 'playing';
-      ScreenText.show(String(score), 'static', { variant: 'score' });
-      const startedAt = performance.now();
-      runStartedAt = startedAt;
-      if (!practice) tickClock();
-      nextBeat = startedAt + 60000 / bpm;
-      Platformer.startRun(startedAt, nextBeat);
-      planObstacleCues();
-      beatTimer = setTimeout(beat, 60000 / bpm);
+    const { holdSeconds } = GAME_COUNTDOWN;
+    function showReady() {
+      ScreenText.show('READY', 'scroll-stop', { onComplete() {
+        GameLights.ready(holdSeconds, () => {
+          ScreenText.show('SET', 'static');
+          beatTimer = setTimeout(() => {
+            phase = 'playing';
+            nextBeat = runStartedAt = performance.now();
+            beat();
+          }, holdSeconds * 1000);
+        });
+      } });
     }
-    ScreenText.show('READY', 'scroll-stop', { onComplete() { textDone = true; begin(); } });
-    GameLights.ready(() => { lightsDone = true; begin(); });
     GameAudio.prepareRun().then(available => {
       if (session !== token || phase !== 'ready') return;
       cueAudio = available;
       if (available) {
-        audioDone = true;
-        begin();
+        showReady();
       } else {
         ScreenText.show('VISUAL ONLY', 'static');
-        beatTimer = setTimeout(() => { audioDone = textDone = true; begin(); }, 900);
+        beatTimer = setTimeout(showReady, 900);
       }
     });
   }
   document.addEventListener('game-start-request', () => start(false));
   document.addEventListener('practice-start-request', event => start(true, event.detail.startingSpeed));
   document.addEventListener('game-button-press', event => {
+    if (phase === 'result' && event.detail.color === 'green') {
+      continueToLobby();
+      return;
+    }
     if (phase !== 'playing') return;
     taps++;
     if (!queue.length) return;
@@ -214,7 +277,7 @@
   });
   window.GameSession = {
     get phase() { return phase; },
-    get blocksMenu() { return ['ready', 'playing', 'ending'].includes(phase); },
+    get blocksMenu() { return phase !== 'idle' && phase !== 'practice-result'; },
     get score() { return score; },
     get bpm() { return bpm; },
     leave
