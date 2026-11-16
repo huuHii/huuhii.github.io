@@ -8,10 +8,10 @@ const RESULTS_SCREEN = {
   details: { fontSize: '2.49cqw', itemGap: '10cqw', continueGap: '2cqw', widthsPerSecond: 0.32 },
   continue: { fontSize: '2.49cqw', iconGap: '0.65cqw', entryDelaySeconds: 0.15, entrySeconds: 0.3 },
   countUp: {
-    pointsPerSecond: 100,
-    minSeconds: 0.55,
-    maxSeconds: 2.2,
-    easeOutPower: 2 // 1 is linear. Higher values slow down more near the final score.
+    pointsPerSecond: 60,
+    minSeconds: 1,
+    maxSeconds: 5,
+    easeOutPower: 3 // 1 is linear. Higher values slow down more near the final score.
   }
 };
 

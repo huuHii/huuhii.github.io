@@ -26,7 +26,7 @@ const appDisplay = matchMedia('(display-mode: standalone), (display-mode: fullsc
 function updateDisplayEffects() {
   const standalone = navigator.standalone === true || appDisplay.matches;
   themeRoot.toggleAttribute('data-standalone-display', standalone);
-  themeRoot.toggleAttribute('data-flat-crt', standalone || touchDisplay.matches);
+  themeRoot.toggleAttribute('data-transform-motion', standalone || touchDisplay.matches);
 }
 touchDisplay.addEventListener('change', updateDisplayEffects);
 appDisplay.addEventListener('change', updateDisplayEffects);

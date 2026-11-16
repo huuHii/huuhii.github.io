@@ -71,7 +71,7 @@
   }
   function render(state) {
     const pressed = state.holds.size > 0;
-    const lit = state.lit || (menuFeedback && pressed && state.accepted);
+    const lit = state.lit || (menuFeedback && pressed);
     state.renderArt(lit, pressed);
     state.button.setAttribute('aria-pressed', String(pressed));
   }
@@ -84,21 +84,26 @@
       state.cancelled = false;
     }
     render(state);
-    if (!wasHeld && state.accepted) {
+    if (!wasHeld) {
       GameAudio.press();
-      document.dispatchEvent(new CustomEvent('game-button-press', { detail: { color: state.color } }));
+      // A press during a transition still gives feedback, but cannot act on release.
+      if (state.accepted) {
+        document.dispatchEvent(new CustomEvent('game-button-press', { detail: { color: state.color } }));
+      }
     }
   }
   function release(state, id, cancelled = false) {
     if (!state.holds.delete(id)) return;
     if (cancelled) state.cancelled = true;
     render(state);
-    if (!state.holds.size && state.accepted) {
-      state.accepted = false;
+    if (!state.holds.size) {
       GameAudio.release();
-      document.dispatchEvent(new CustomEvent('game-button-release', {
-        detail: { color: state.color, cancelled: state.cancelled }
-      }));
+      if (state.accepted) {
+        state.accepted = false;
+        document.dispatchEvent(new CustomEvent('game-button-release', {
+          detail: { color: state.color, cancelled: state.cancelled }
+        }));
+      }
     }
   }
   function releaseAll() {

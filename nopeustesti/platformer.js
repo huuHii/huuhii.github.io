@@ -63,7 +63,7 @@ const Platformer = (() => {
     const bounds = canvas.getBoundingClientRect();
     ({ width, height } = bounds);
     if (!width || !height || !context) return;
-    const ratio = Math.min(settings.maxPixelRatio, window.devicePixelRatio || 1);
+    const ratio = Math.min(GRAPHICS_CONFIG.canvasPixelRatioCap, window.devicePixelRatio || 1);
     const pixelWidth = Math.max(1, Math.round(width * ratio));
     const pixelHeight = Math.max(1, Math.round(height * ratio));
     if (canvas.width !== pixelWidth) canvas.width = pixelWidth;

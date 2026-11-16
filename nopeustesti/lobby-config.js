@@ -4,10 +4,10 @@ const LOBBY_UI = {
   // Each hold starts when the text reaches the center.
   // Enter a positive speed in percent of LED screen width per second, or null for the default.
   welcome: { text: 'WELCOME', holdSeconds: 2, speed: null },
-  modeTitle: { text: 'CLASSIC', holdSeconds: 1, speed: 80 },
+  modeTitle: { text: 'CLASSIC', holdSeconds: 1, speed: 85 },
   // Prompt text can be a string or an array of text and icons.
-  pressToStart: { text: ['PRESS ', LOBBY_RIGHT_ARROW, ' TO PLAY'], holdSeconds: 3, speed: 25 },
-  holdToPractice: { text: ['HOLD ', LOBBY_RIGHT_ARROW, ' TO PRACTICE'], holdSeconds: 3, speed: 25 },
+  pressToStart: { text: ['PRESS ', LOBBY_RIGHT_ARROW, ' TO PLAY'], holdSeconds: 3, speed: 28 },
+  holdToPractice: { text: ['HOLD ', LOBBY_RIGHT_ARROW, ' TO PRACTICE'], holdSeconds: 3, speed: 28 },
   // WELCOME shares the mode title typography.
   modeTitleStyle: {
     font: 'Ari W9500 Condensed Display',

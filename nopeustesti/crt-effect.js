@@ -48,7 +48,7 @@ const CrtEffect = (() => {
     const xStrength = screenWidth * clamp(settings.curvatureX, 0, 0.2);
     const yStrength = screenHeight * clamp(settings.curvatureY, 0, 0.2);
     const strength = Math.max(xStrength, yStrength);
-    if (!settings.enabled || !strength || !context) {
+    if (!settings.enabled || !GRAPHICS_CONFIG.crtCurvature || !strength || !context) {
       set('curvature', 'none');
       return;
     }

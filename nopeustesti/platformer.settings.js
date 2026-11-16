@@ -1,5 +1,4 @@
 const PLATFORMER_SETTINGS = {
-  maxPixelRatio: 2,
   startAcceleration: { maxSeconds: 0.3, maxBeatFraction: 0.45 },
   obstacleFadeSeconds: 0.45, // linear fade starting at failure; 0 hides immediately
   fallCamera: {
